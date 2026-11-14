@@ -1,0 +1,125 @@
+"use client";
+
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartContainer, ChartLegend, ChartLegendContent, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { Progress } from "@/components/ui/progress";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { EmberShell } from "@/components/ember-shell";
+import { StatCard } from "@/components/stat-card";
+import { DAILY_TREND, MUNICIPALITIES } from "@/lib/hotspots";
+
+const BREAKDOWN = [
+  { label: "High", detail: "≥ 80% · 'h'", pct: 38, count: 284 },
+  { label: "Medium", detail: "30–79% · 'n'", pct: 46, count: 344 },
+  { label: "Low", detail: "< 30% · 'l'", pct: 16, count: 119 },
+];
+
+const chartConfig = {
+  viirs: { label: "VIIRS 375 m", color: "hsl(199 89% 48%)" },
+  modis: { label: "MODIS 1 km", color: "hsl(38 92% 50%)" },
+} satisfies ChartConfig;
+
+export function AnalyticsPage() {
+  const weekTotal = DAILY_TREND.reduce((a, d) => a + d.viirs + d.modis, 0);
+  return (
+    <EmberShell active="analytics" title="Analytics">
+      <section className="ember-page-heading">
+        <div>
+          <div className="ember-eyebrow">
+            <span /> TELEMETRY INTELLIGENCE
+          </div>
+          <h1>
+            Burn-zone analytics<span>.</span>
+          </h1>
+          <p>Detection trends, confidence mix, and settlement risk · last 7 days.</p>
+        </div>
+      </section>
+
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Analytics metrics">
+        <StatCard label="Total hotspots · 7 days" value="747" hint="▲ 12% vs previous 7 days" />
+        <StatCard label="Est. burn scar area" value="3,420 ha" hint="VIIRS 375 m perimeter" />
+        <StatCard label="Peak radiative power" value="84.6 MW" hint="Single VIIRS pixel" />
+        <StatCard label="Settlements at risk" value="5 towns" hint="Within 3 km of a cluster" tone="alert" />
+      </section>
+
+      <div className="mt-6 grid gap-4 lg:grid-cols-5">
+        <Card className="lg:col-span-3">
+          <CardHeader>
+            <CardTitle className="text-base">Daily detections</CardTitle>
+            <CardDescription>VIIRS vs MODIS, stacked · {weekTotal} this week</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ChartContainer config={chartConfig} className="h-64 w-full">
+              <BarChart data={DAILY_TREND} accessibilityLayer>
+                <CartesianGrid vertical={false} />
+                <XAxis dataKey="day" tickLine={false} axisLine={false} tickMargin={8} />
+                <ChartTooltip content={<ChartTooltipContent />} />
+                <ChartLegend content={<ChartLegendContent />} />
+                <Bar dataKey="viirs" stackId="a" fill="var(--color-viirs)" radius={[0, 0, 4, 4]} />
+                <Bar dataKey="modis" stackId="a" fill="var(--color-modis)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
+
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle className="text-base">Confidence mix</CardTitle>
+            <CardDescription>After normalizing MODIS % and VIIRS l/n/h</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-5">
+            {BREAKDOWN.map((b) => (
+              <div key={b.label} className="space-y-2">
+                <div className="flex items-baseline justify-between text-sm">
+                  <span className="font-medium">
+                    {b.label} <span className="text-xs font-normal text-muted-foreground">{b.detail}</span>
+                  </span>
+                  <span className="tabular-nums">
+                    {b.pct}% <span className="text-xs text-muted-foreground">({b.count})</span>
+                  </span>
+                </div>
+                <Progress value={b.pct} aria-label={`${b.label} confidence ${b.pct}%`} className="h-2" />
+              </div>
+            ))}
+          </CardContent>
+          <CardFooter className="text-xs text-muted-foreground">312 overlapping signals merged, preventing duplicate dispatches.</CardFooter>
+        </Card>
+      </div>
+
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">Settlement risk index</CardTitle>
+          <CardDescription>Municipalities ranked by fire clusters within 10 km</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="pl-6">Municipality</TableHead>
+                <TableHead className="text-right">Active clusters</TableHead>
+                <TableHead className="text-right">Peak brightness</TableHead>
+                <TableHead className="pr-6 text-right">Risk</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {MUNICIPALITIES.map((m) => (
+                <TableRow key={m.name}>
+                  <TableCell className="pl-6 font-medium">{m.name}</TableCell>
+                  <TableCell className="text-right tabular-nums">{m.activeFires}</TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">{m.highestBrightness}</TableCell>
+                  <TableCell className="pr-6 text-right">
+                    <Badge variant={m.risk === "CRITICAL" ? "destructive" : m.risk === "ELEVATED" ? "default" : "secondary"} className="capitalize">
+                      {m.risk.toLowerCase()}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </EmberShell>
+  );
+}

@@ -31,6 +31,11 @@ export interface EmberMapLayers {
   clusteredHotspots: boolean;
 }
 
+// Sharp close-ups for "Realistic": Sentinel-2 cloudless 10 m mosaic (EOX, CC BY-NC-SA 4.0: non-commercial use).
+const S2_URL = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2020_3857/default/g/{z}/{y}/{x}.jpg";
+const S2_ATTRIBUTION =
+  '<a href="https://s2maps.eu" target="_blank" rel="noopener">Sentinel-2 cloudless</a> by EOX IT Services GmbH (contains modified Copernicus Sentinel data 2020)';
+
 const BLUE_MARBLE_URL =
   "https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/BlueMarble_NextGeneration/default/GoogleMapsCompatible_Level8/{z}/{y}/{x}.jpg";
 
@@ -337,6 +342,8 @@ export function EmberMap({
   wind = null,
   spread = null,
   spreadWinds = null,
+  windPace = 1,
+  windTexture = false,
   spreadPreviewHour = null,
   activeDate = null,
   isHistoricalDate = false,
@@ -347,6 +354,8 @@ export function EmberMap({
   wind?: WindField | null; // global live wind → animated particles over the whole map
   spread?: FeatureCollection | null; // projected fire spread areas
   spreadWinds?: FireWind[] | null; // per-fire hourly wind → animated fire front
+  windPace?: number; // wind animation speed multiplier (visual only)
+  windTexture?: boolean; // "Wind" map style: opaque wind colours as the map texture, white streamlines
   spreadPreviewHour?: number | null; // when scrubbing SUB-DAILY timeline, pin spread front to this hour
   activeDate?: string | null; // YYYY-MM-DD scrubbed timeline date for NASA GIBS & FIRMS WMS TIME=
   isHistoricalDate?: boolean; // true when viewing a past historical archive date
@@ -590,6 +599,20 @@ export function EmberMap({
       );
     }
 
+    // Blue Marble is 500 m imagery (blurry past zoom 8): from zoom 8 lay the 10 m Sentinel-2 mosaic over it.
+    // A past date shows that day's imagery instead, so the two dates are never mixed.
+    const s2Visibility = layers.blueMarble && !(isHistoricalDate && activeDate) ? "visible" : "none";
+    if (!map.getSource("eox-s2cloudless")) {
+      map.addSource("eox-s2cloudless", { type: "raster", tiles: [S2_URL], tileSize: 256, minzoom: 8, maxzoom: 15, attribution: S2_ATTRIBUTION });
+      const above = map.getStyle().layers.find((l) => l.type === "symbol" && !l.id.startsWith("ember-"))?.id;
+      map.addLayer(
+        { id: "eox-s2cloudless-layer", type: "raster", source: "eox-s2cloudless", minzoom: 8, layout: { visibility: s2Visibility }, paint: { "raster-fade-duration": 250 } },
+        [above, "ember-buildings-3d", "ember-boundary-fill"].find((id): id is string => !!id && !!map.getLayer(id)),
+      );
+    } else if (map.getLayer("eox-s2cloudless-layer")) {
+      map.setLayoutProperty("eox-s2cloudless-layer", "visibility", s2Visibility);
+    }
+
     if (!map.getSource("natural-earth-borders")) {
       map.addSource("natural-earth-borders", {
         type: "geojson",
@@ -736,6 +759,10 @@ export function EmberMap({
   }, [spread, styleVersion]);
 
   // Fire-front time-lapse: synced to SUB-DAILY scrubber hour when provided, else loops 0 -> 6 h.
+  const textureRef = useRef(windTexture);
+  textureRef.current = windTexture;
+  const paceRef = useRef(windPace);
+  paceRef.current = windPace;
   const badgeRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const map = mapRef.current;
@@ -796,7 +823,7 @@ export function EmberMap({
     drop();
     if (!wind) return;
     const MAX_LAT = 85.0511;
-    const size = 1024;
+    const size = 512; // the data is a 1° grid: 512 px is already finer, and 4× less main-thread work than 1024
     const img = document.createElement("canvas");
     img.width = size;
     img.height = size;
@@ -819,11 +846,11 @@ export function EmberMap({
       coordinates: [[-180, MAX_LAT], [180, MAX_LAT], [180, -MAX_LAT], [-180, -MAX_LAT]],
     });
     map.addLayer(
-      { id: "ember-wind-field", type: "raster", source: "ember-wind-field", paint: { "raster-opacity": 0.72, "raster-resampling": "linear", "raster-fade-duration": 0 } },
+      { id: "ember-wind-field", type: "raster", source: "ember-wind-field", paint: { "raster-opacity": windTexture ? 1 : darkRef.current ? 0.72 : 0.85, "raster-resampling": "linear", "raster-fade-duration": 0 } },
       beforeLabels && map.getLayer(beforeLabels) ? beforeLabels : undefined,
     );
     return drop;
-  }, [wind, styleVersion]);
+  }, [wind, styleVersion, windTexture]);
 
   // Wind particles: white trails over the coloured layer; each moves with the live wind at its spot.
   useEffect(() => {
@@ -880,10 +907,15 @@ export function EmberMap({
       ctx.globalCompositeOperation = "source-over";
       ctx.lineWidth = 1.2;
       const path = new Path2D();
+      // Zoomed out, a pixel covers hundreds of km: slow the streaks down so the wind reads as wind, not warp speed.
+      const zoomPace = Math.min(1, Math.max(0.12, (map.getZoom() - 0.5) / 5));
       for (const p of particles) {
         const ll = map.unproject([p.x, p.y]);
-        // Off the globe's edge unproject gives no real point: respawn instead of drawing there.
         if (!Number.isFinite(ll.lat) || Math.abs(ll.lat) > 85 || ++p.age > 90) { spawn(p); continue; }
+        // In space around the globe, unproject snaps to the globe's edge, so projecting back lands elsewhere:
+        // that pixel isn't on Earth, don't draw wind there.
+        const back = map.project(ll);
+        if (Math.abs(back.x - p.x) > 1.5 || Math.abs(back.y - p.y) > 1.5) { spawn(p); continue; }
         const v = sampleWind(wind, ll.lat, ll.lng);
         const speed = Math.hypot(v.u, v.v);
         if (speed < 0.3) continue;
@@ -891,14 +923,14 @@ export function EmberMap({
         const cosLat = Math.max(0.05, Math.cos((ll.lat * Math.PI) / 180));
         const q = map.project([ll.lng + (v.u / speed) * 0.001 / cosLat, ll.lat + (v.v / speed) * 0.001]);
         const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1;
-        const px = Math.min(4, 0.08 * speed + 0.3); // on-screen speed grows with wind speed
+        const px = Math.min(4, 0.08 * speed + 0.3) * paceRef.current * zoomPace; // grows with wind speed
         path.moveTo(p.x, p.y);
         p.x += (dx / len) * px;
         p.y += (dy / len) * px;
         path.lineTo(p.x, p.y);
         if (!(p.x >= 0 && p.y >= 0 && p.x <= W && p.y <= H)) spawn(p); // also catches NaN
       }
-      ctx.strokeStyle = "rgba(255,255,255,0.85)";
+      ctx.strokeStyle = textureRef.current || darkRef.current ? "rgba(255,255,255,0.85)" : "rgba(51,65,85,0.4)"; // light mode: soft see-through slate (white vanishes, solid black is harsh)
       ctx.stroke(path);
     };
     // Reduced motion: draw still streaks (direction + strength) instead of animating, redrawn after each move.
