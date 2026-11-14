@@ -1,5 +1,6 @@
 // Smart Action Guide: rule-based translation of hotspots + heat + air quality into guidance.
-// General preparedness guidance only — to be reviewed with DRRMO / health authorities.
+// Household wording of WHO hospital fire-safety principles (assess, detect, contain, drill, RACE);
+// execution aligns with the Fire Code of the Philippines (RA 9514, BFP) and local DRRMO guidance.
 
 export type HeatLevel = "None" | "Caution" | "Extreme Caution" | "Danger" | "Extreme Danger";
 
@@ -57,7 +58,12 @@ export function buildGuide(input: GuideInput): Guide {
   const update: string[] = [];
   const todo: string[] = [];
   const bring = ["Drinking water", "First-aid kit", "Flashlight and spare batteries"];
-  const prepare = ["Charged phone and power bank", "List of emergency hotlines (local DRRMO, BFP, barangay)"];
+  // WHO household readiness + RA 9514 (BFP) alignment: assess, detect, contain, know whom to call.
+  const prepare = [
+    "Charged phone and power bank",
+    "List of emergency hotlines (local DRRMO, BFP, barangay)",
+    "Check your home for fire risks: cooking fuels, faulty wiring, stored flammables; keep exits clear",
+  ];
 
   const nearby = (input.hotspots ?? []).filter((h) => h.distanceKm <= NEARBY_KM);
   const nearestKm = nearby.length ? Math.min(...nearby.map((h) => h.distanceKm)) : null;
@@ -72,12 +78,18 @@ export function buildGuide(input: GuideInput): Guide {
       `${nearby.length} hotspot cluster${nearby.length > 1 ? "s" : ""} detected within ${NEARBY_KM} km; nearest about ${nearestKm!.toFixed(1)} km away${strong ? " (high confidence)" : ""}.`,
     );
     todo.push("Check the exact hotspot location and verify against official fire reports.");
-    todo.push("Monitor announcements from your local DRRMO.");
+    todo.push("Monitor announcements from your local DRRMO and BFP (Fire Code of the Philippines, RA 9514).");
     if (nearestKm! <= CLOSE_KM) {
-      todo.push("Keep away from the burning area and do not attempt to fight large fires yourself.");
+      // RACE: Rescue, Alarm, Confine, Extinguish/evacuate — household wording.
+      todo.push("RACE: move people in immediate danger out first, then raise the alarm.");
+      todo.push("Confine smoke and fire: close doors and windows on your way out.");
+      todo.push("Only use an extinguisher on a small fire if trained and with an exit behind you; otherwise evacuate.");
       todo.push("Be ready to leave if local authorities advise evacuation.");
+      bring.push("Fire extinguisher (use only if trained)");
+      prepare.push("Working smoke alarm and accessible extinguisher or hose if available");
       prepare.push("Go-bag with IDs, medicines, clothes and important documents");
-      prepare.push("Know your evacuation route and meeting point");
+      prepare.push("Know your evacuation route and meeting point; assist children, older adults and people with limited mobility");
+      prepare.push("Practice a home fire drill: two ways out of every room");
     }
     if (input.windKmh !== null && input.windKmh >= 20) {
       update.push(`Winds of ${Math.round(input.windKmh)} km/h can spread fire and smoke quickly.`);
@@ -114,7 +126,10 @@ export function buildGuide(input: GuideInput): Guide {
     bring.push("Face mask (N95 recommended for smoke)");
   }
 
-  if (todo.length === 0) todo.push("No immediate action needed. Stay informed through official channels.");
+  if (todo.length === 0) {
+    todo.push("No immediate action needed. Stay informed through official channels.");
+    todo.push("Test smoke alarms and review your household evacuation plan regularly.");
+  }
   prepare.push("Emergency supplies if local authorities advise increased readiness");
 
   return { heatIndex, heat, nearbyCount: nearby.length, nearestKm, update, todo, bring, prepare };
