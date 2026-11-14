@@ -960,7 +960,7 @@
   .ember-map-section .ember-map-canvas { min-height: clamp(560px, 72vh, 720px); }
   .ember-map-section .ember-incident-panel {
     position: absolute;
-    z-index: 12;
+    z-index: 5;
     top: 14px;
     right: 14px;
     bottom: 14px;
