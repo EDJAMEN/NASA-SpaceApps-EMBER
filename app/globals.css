@@ -307,6 +307,8 @@
 .ember-map-search kbd { flex: 0 0 auto; border: 1px solid oklch(0.98 0.01 90 / 25%); border-radius: var(--radius-chip); padding: 2px 4px; color: oklch(0.96 0.01 90 / 75%); font-family: var(--font-mono); font-size: 8px; }
 .ember-map-search button { display: grid; width: 18px; height: 18px; flex: 0 0 auto; place-items: center; border: 0; background: transparent; color: inherit; cursor: pointer; }
 .ember-map-tools { position: absolute; top: 58px; right: 14px; display: grid; gap: 2px; overflow: hidden; border: 1px solid oklch(0.98 0.01 90 / 24%); border-radius: var(--radius-control); background: oklch(0.18 0.02 170 / 68%); padding: 3px; backdrop-filter: blur(8px); }
+.ember-fire-badge { position: absolute; top: 14px; left: 14px; z-index: 5; display: inline-flex; align-items: center; gap: 6px; max-width: calc(100% - 330px); border: 1px solid rgb(255 255 255 / 25%); border-radius: 999px; background: linear-gradient(135deg, #b4161b, #e2481f); padding: 7px 10px; color: #fff; font-size: 11px; font-weight: 650; white-space: nowrap; cursor: pointer; box-shadow: 0 4px 16px rgb(180 22 27 / 45%); }
+.ember-fire-badge span { overflow: hidden; text-overflow: ellipsis; }
 .ember-map-tools button { width: 27px; height: 27px; color: oklch(0.98 0.01 90); }
 .ember-map-tools > span { height: 1px; margin: 0 4px; background: oklch(0.98 0.01 90 / 24%); }
 .ember-fullscreen { position: absolute; right: 14px; bottom: 15px; width: 29px; height: 29px; border: 1px solid oklch(0.98 0.01 90 / 24%); border-radius: var(--radius-control); background: oklch(0.18 0.02 170 / 68%); color: oklch(0.98 0.01 90); }
@@ -941,6 +943,7 @@
   .ember-map-section .ember-map-layout { min-height: 0; margin: 0 -15px; border-right: 0; border-left: 0; border-radius: 0; }
   .ember-map-section .ember-map-canvas { min-height: clamp(380px, 70vh, 620px); }
   .ember-map-section .ember-map-search { top: 10px; right: 10px; left: 10px; width: auto; height: 38px; }
+  .ember-fire-badge { top: 56px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 20px); }
   .ember-map-section .ember-map-search input { font-size: 12px; }
   .ember-map-section .ember-map-search kbd { display: none; }
   .ember-map-section .ember-map-tools { top: auto; right: 10px; bottom: 58px; }

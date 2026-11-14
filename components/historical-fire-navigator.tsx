@@ -3,6 +3,14 @@
 import { useState } from "react";
 import { Calendar, History, Info, Pause, Play, Radio, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent } from "@/components/ui/card";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Slider } from "@/components/ui/slider";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatShortDate } from "@/lib/historical-fires";
 import type { Granularity, QuickRange, SpanDays, TimelineStep } from "@/lib/timeline";
 
@@ -14,10 +22,10 @@ const QUICK_PILLS: readonly { key: QuickRange; label: string; title: string }[] 
 ];
 
 const SPAN_OPTIONS: readonly { days: SpanDays; label: string }[] = [
-  { days: 1, label: "DAY" },
-  { days: 3, label: "3 DAYS" },
-  { days: 7, label: "WEEK" },
-  { days: 30, label: "MONTH" },
+  { days: 1, label: "Day" },
+  { days: 3, label: "3 days" },
+  { days: 7, label: "Week" },
+  { days: 30, label: "Month" },
 ];
 
 const SPAN_TAG: Record<SpanDays, string> = {
@@ -91,201 +99,177 @@ export function HistoricalFireNavigator({
   }
 
   return (
-    <div className="ember-timeline-nav" role="region" aria-label="Historical Fire Map Navigator">
-      {/* Tier 1: Top Control Strip */}
-      <div className="ember-nav-top">
-        <div className="ember-nav-group">
-          <span className="ember-nav-kicker">
-            <span className={`ember-timeline-live ${isHistorical ? "historical" : ""}`} />
-            {isHistorical ? "ARCHIVE WINDOW" : "FIRE TIMELINE"}
-          </span>
-          <div className="ember-horizon-pills" role="group" aria-label="Quick horizon presets">
-            {QUICK_PILLS.map((pill) => {
-              const active = !isHistorical && quickRange === pill.key;
-              return (
-                <button
-                  key={pill.key}
-                  type="button"
-                  title={pill.title}
-                  aria-pressed={active}
-                  className={active ? "active" : ""}
-                  onClick={() => onSelectQuickRange(pill.key)}
-                >
-                  {pill.label}
-                </button>
-              );
-            })}
-          </div>
-          <div className="ember-info-wrap">
-            <button
-              type="button"
-              className="ember-info-btn"
-              aria-label="Satellite overpass and archive coverage info"
-              aria-expanded={infoOpen}
-              title="Satellite overpass latency & MODIS/VIIRS historical archive coverage"
-              onClick={() => setInfoOpen((v) => !v)}
-            >
-              <Info size={13} />
-            </button>
-            {infoOpen && (
-              <div className="ember-info-popover" role="tooltip">
-                <strong>FIRMS Overpass &amp; Archive Coverage</strong>
-                <p>
-                  NRT passes appear within ~3 hours of acquisition.{" "}
-                  <b>MODIS (Terra/Aqua, 1 km)</b> spans Nov 2000–present;{" "}
-                  <b>VIIRS (S-NPP, NOAA-20/21, 375 m)</b> begins Jan 2012.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        <div className="ember-nav-granularity" role="radiogroup" aria-label="Timeline granularity">
-          {(
-            [
-              ["daily", "DAILY"],
-              ["subdaily", "SUB-DAILY"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="radio"
-              aria-checked={granularity === key}
-              className={granularity === key ? "active" : ""}
-              title={
-                key === "daily"
-                  ? "Step in 24-hour daily increments"
-                  : "Step in 3-hour satellite overpass increments (syncs with wind spread cone)"
-              }
-              onClick={() => onChangeGranularity(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="ember-nav-archive-controls">
-          <label className="ember-date-picker-label" title="Pick historical date (2000-11-01 to present)">
-            <Calendar size={13} className="ember-cal-icon" />
-            <span className="ember-date-formatted">
-              {formatShortDate(historicalDate ?? todayStr)}
+    <Card role="region" aria-label="Historical Fire Map Navigator" className="overflow-hidden">
+      <CardContent className="space-y-3 p-3">
+        {/* Top control strip */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <Badge variant={isHistorical ? "default" : "secondary"} className="gap-1.5">
+            <span className="relative flex size-1.5">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
+              <span className="relative inline-flex size-1.5 rounded-full bg-current" />
             </span>
-            <input
-              type="date"
-              min="2000-11-01"
-              max={todayStr}
-              value={historicalDate ?? todayStr}
-              aria-label="Historical fire map date"
-              onChange={(e) => {
-                if (e.target.value) onSelectHistoricalDate(e.target.value);
-              }}
-            />
-          </label>
-
-          <label className="ember-span-select-wrap" title="Time window span">
-            <History size={12} className="ember-cal-icon" />
-            <select
-              aria-label="Time window span"
-              value={spanDays}
-              onChange={(e) => onChangeSpanDays(Number(e.target.value) as SpanDays)}
-            >
-              {SPAN_OPTIONS.map((opt) => (
-                <option key={opt.days} value={opt.days}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
-
-      {/* Status & Era Context Strip (shown cleanly when historical or MODIS-only era active) */}
-      {(isHistorical || isModisEraOnly) && (
-        <div className="ember-nav-banners">
-          {isHistorical && historicalDate && (
-            <div className="ember-historical-badge" role="status">
-              <span className="ember-pulse-amber" aria-hidden />
-              <span>
-                HISTORICAL ARCHIVE · {formatShortDate(historicalDate)} ({SPAN_TAG[spanDays]})
-                {loadingArchive ? " · Syncing…" : ""}
-              </span>
-              <button type="button" className="ember-back-live-btn" onClick={onBackToLive}>
-                <RotateCcw size={11} /> Back to Live
-              </button>
-            </div>
-          )}
-          {isModisEraOnly && (
-            <div className="ember-era-badge" title="VIIRS launched in 2012 (Suomi NPP); earlier dates use harmonized 1km MODIS">
-              <Radio size={11} /> MODIS Era Only (1km) · Harmonized to VIIRS-equivalent scale
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Tier 2: Interactive Scrubber Strip */}
-      <div className="ember-nav-scrubber">
-        <div className="ember-scrubber-meta">
-          <span className="ember-scrubber-active-label">
-            {activeStep?.displayLabel ?? "Today"}
-          </span>
-          {granularity === "subdaily" && activeStep && (
-            <span className="ember-scrubber-pass-badge">
-              {spreadOn ? `+${activeStep.spreadHours.toFixed(1)}h cone · ` : ""}
-              {activeStep.overpassHint}
-            </span>
-          )}
-        </div>
-
-        <div className="ember-scrubber-row">
-          <span className="ember-time-mark">{startLabel}</span>
-          <div className="ember-scrubber-track-wrap">
-            <input
-              type="range"
-              min={0}
-              max={safeMax}
-              step={1}
-              value={clampedIdx}
-              onChange={(e) => onScrubChange(Number(e.target.value))}
-              aria-label="Historical timeline scrubber"
-              className="ember-scrubber-input"
-              style={{
-                background: `linear-gradient(to right, #EA580C 0%, #EA580C ${progressPct}%, rgba(234, 88, 12, 0.18) ${progressPct}%, rgba(234, 88, 12, 0.18) 100%)`,
-              }}
-            />
-            {tickIndices.length > 0 && (
-              <div className="ember-scrubber-ticks" aria-hidden>
-                {tickIndices.map((idx) => {
-                  const pct = safeMax > 0 ? (idx / safeMax) * 100 : 0;
-                  const step = steps[idx];
-                  if (!step) return null;
-                  return (
-                    <span
-                      key={idx}
-                      className={`ember-scrubber-tick ${idx === clampedIdx ? "current" : ""}`}
-                      style={{ left: `${pct}%` }}
-                    >
-                      <i />
-                      <b>{step.shortLabel}</b>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-          <span className="ember-time-mark ember-time-mark-end">{endLabel}</span>
-
-          <Button
-            variant="outline"
-            size="icon"
-            className="ember-play-button ember-play-terracotta"
-            aria-label={playing ? "Pause timeline" : "Play timeline"}
-            onClick={onTogglePlay}
+            {isHistorical ? "Archive window" : "Fire timeline"}
+          </Badge>
+          <ToggleGroup
+            type="single"
+            value={!isHistorical && quickRange ? quickRange : ""}
+            onValueChange={(v) => {
+              if (v === "today" || v === "24h" || v === "3d" || v === "7d") onSelectQuickRange(v);
+            }}
+            aria-label="Quick horizon presets"
+            className="rounded-lg border p-0.5"
           >
-            {playing ? <Pause size={14} /> : <Play size={14} />}
-          </Button>
+            {QUICK_PILLS.map((pill) => (
+              <ToggleGroupItem key={pill.key} value={pill.key} title={pill.title} aria-label={pill.label} className="h-7 px-2 text-[11px]">
+                {pill.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <Popover open={infoOpen} onOpenChange={setInfoOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" size="icon" className="size-7" aria-label="Satellite overpass and archive coverage info" title="Satellite overpass latency & MODIS/VIIRS historical archive coverage">
+                <Info size={13} />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="max-w-xs text-xs" role="tooltip">
+              <p className="font-semibold">FIRMS Overpass &amp; Archive Coverage</p>
+              <p className="mt-1 text-muted-foreground">
+                NRT passes appear within ~3 hours of acquisition. <b className="text-foreground">MODIS (Terra/Aqua, 1 km)</b> spans Nov 2000–present; <b className="text-foreground">VIIRS (S-NPP, NOAA-20/21, 375 m)</b> begins Jan 2012.
+              </p>
+            </PopoverContent>
+          </Popover>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <ToggleGroup
+              type="single"
+              value={granularity}
+              onValueChange={(v) => {
+                if (v === "daily" || v === "subdaily") onChangeGranularity(v);
+              }}
+              aria-label="Timeline granularity"
+              className="rounded-lg border p-0.5"
+            >
+              <ToggleGroupItem value="daily" title="Step in 24-hour daily increments" aria-label="Daily" className="h-7 px-2 text-[11px]">
+                Daily
+              </ToggleGroupItem>
+              <ToggleGroupItem value="subdaily" title="Step in 3-hour satellite overpass increments (syncs with wind spread cone)" aria-label="Sub-daily" className="h-7 px-2 text-[11px]">
+                Sub-daily
+              </ToggleGroupItem>
+            </ToggleGroup>
+            <div className="relative" title="Pick historical date (2000-11-01 to present)">
+              <Calendar size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="date"
+                min="2000-11-01"
+                max={todayStr}
+                value={historicalDate ?? todayStr}
+                aria-label="Historical fire map date"
+                onChange={(e) => {
+                  if (e.target.value) onSelectHistoricalDate(e.target.value);
+                }}
+                className="h-7 w-[132px] pl-7 font-mono text-[11px]"
+              />
+            </div>
+            <Select value={String(spanDays)} onValueChange={(v) => onChangeSpanDays(Number(v) as SpanDays)}>
+              <SelectTrigger aria-label="Time window span" title="Time window span" className="h-7 w-[104px] text-[11px]">
+                <History size={12} className="text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SPAN_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.days} value={String(opt.days)}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
-      </div>
-    </div>
+
+        {/* Status & era context strip */}
+        {(isHistorical || isModisEraOnly) && (
+          <div className="space-y-1.5">
+            {isHistorical && historicalDate && (
+              <Alert className="flex items-center gap-2 border-amber-500/40 bg-amber-500/10 px-2.5 py-1.5">
+                <span className="relative flex size-1.5 shrink-0">
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-60" />
+                  <span className="relative inline-flex size-1.5 rounded-full bg-amber-500" />
+                </span>
+                <AlertDescription className="flex flex-1 flex-wrap items-center gap-x-1.5 font-mono text-[10px] uppercase tracking-wide">
+                  Historical archive · {formatShortDate(historicalDate)} ({SPAN_TAG[spanDays]})
+                  {loadingArchive ? " · Syncing…" : ""}
+                </AlertDescription>
+                <Button variant="ghost" size="sm" className="h-6 shrink-0 gap-1 px-2 text-[11px]" onClick={onBackToLive}>
+                  <RotateCcw size={11} /> Back to live
+                </Button>
+              </Alert>
+            )}
+            {isModisEraOnly && (
+              <Alert className="px-2.5 py-1.5" title="VIIRS launched in 2012 (Suomi NPP); earlier dates use harmonized 1km MODIS">
+                <AlertDescription className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <Radio size={11} /> MODIS era only (1 km) · harmonized to VIIRS-equivalent scale
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
+        )}
+
+        {/* Scrubber strip */}
+        <div className="space-y-1 rounded-lg border bg-muted/40 p-2.5">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-xs font-semibold tabular-nums">
+              {activeStep?.displayLabel ?? "Today"}
+            </span>
+            {granularity === "subdaily" && activeStep && (
+              <Badge variant="outline" className="font-mono text-[10px]">
+                {spreadOn ? `+${activeStep.spreadHours.toFixed(1)}h cone · ` : ""}
+                {activeStep.overpassHint}
+              </Badge>
+            )}
+            <span className="ml-auto font-mono text-[10px] text-muted-foreground tabular-nums">{progressPct}%</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-12 shrink-0 font-mono text-[10px] text-muted-foreground">{startLabel}</span>
+            <div className="relative flex-1">
+              <Slider
+                min={0}
+                max={safeMax}
+                step={1}
+                value={[clampedIdx]}
+                onValueChange={([v]) => onScrubChange(v!)}
+                aria-label="Historical timeline scrubber"
+              />
+              {tickIndices.length > 0 && (
+                <div className="relative mt-1 h-3" aria-hidden>
+                  {tickIndices.map((idx) => {
+                    const pct = safeMax > 0 ? (idx / safeMax) * 100 : 0;
+                    const step = steps[idx];
+                    if (!step) return null;
+                    return (
+                      <span
+                        key={idx}
+                        className={`absolute -translate-x-1/2 text-center font-mono text-[9px] ${idx === clampedIdx ? "font-bold text-foreground" : "text-muted-foreground"}`}
+                        style={{ left: `${pct}%` }}
+                      >
+                        {step.shortLabel}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <span className="w-12 shrink-0 text-right font-mono text-[10px] text-muted-foreground">{endLabel}</span>
+            <Button
+              variant={playing ? "default" : "outline"}
+              size="icon"
+              className="size-8 shrink-0"
+              aria-label={playing ? "Pause timeline" : "Play timeline"}
+              onClick={onTogglePlay}
+            >
+              {playing ? <Pause size={14} /> : <Play size={14} />}
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

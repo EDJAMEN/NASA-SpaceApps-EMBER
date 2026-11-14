@@ -5,9 +5,6 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import {
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
   Check,
   ChevronRight,
   Droplets,
@@ -26,7 +23,6 @@ import {
   Search,
   SlidersHorizontal,
   Thermometer,
-  Wind,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,7 +44,7 @@ import { ClimatePanel, HeatScaleSlider } from "@/components/climate-panel";
 import { useTheme } from "@/hooks/use-theme";
 import { booleanPointInPolygon, pointToPolygonDistance } from "@turf/turf";
 import { NEARBY_KM, splitByBorder } from "@/lib/fire-area";
-import { HOTSPOTS, type Confidence, type Hotspot } from "@/lib/hotspots";
+import { type Confidence, type Hotspot, haversineKm } from "@/lib/hotspots";
 import { WIND_SCALE, compassOf, fetchFireWinds, fetchWindField, keepBox, sampleWind, spreadEllipse, spreadFeatures } from "@/lib/wind";
 import { EmberShell, type EmberLiveStatus } from "@/components/ember-shell";
 import type { EmberMapInstance, EmberMapLayers } from "@/components/ember-map";
@@ -149,7 +145,6 @@ export function EmberDashboard() {
   const [restored, setRestored] = useState(false);
   const handleLocate = useCallback((place: GuidePlace) => {
     setPlace(place);
-    setLive(true);
   }, []);
 
   // Survive a refresh: restore the last place + view, then keep them saved (per-browser convenience only).
@@ -289,7 +284,7 @@ export function EmberDashboard() {
   const [spanDays, setSpanDays] = useState<SpanDays>(1);
   const [scrubIndex, setScrubIndex] = useState<number>(1);
   const [playing, setPlaying] = useState(false);
-  const [live, setLive] = useState(true); // real NASA FIRMS by default; sample data only on request
+  const live = true; // NASA FIRMS live feed only — no sample data
   const [bbox, setBbox] = useState<[number, number, number, number]>([7.3, 124.5, 8.6, 125.5]);
 
   const timelineModel = useMemo(
@@ -357,7 +352,7 @@ export function EmberDashboard() {
   });
   const isLiveFeedActive = (live || isHistoricalMode) && Boolean(firmsQuery.data);
   const regionLabel = place ? [place.name, place.region].filter(Boolean).join(" · ") : "Bukidnon, Mindanao · Philippines";
-  const [selectedId, setSelectedId] = useState<number>(HOTSPOTS[0]?.id ?? 0);
+  const [selectedId, setSelectedId] = useState<number>(0);
   const [selectedLayer, setSelectedLayer] = useState("Thermal anomalies");
   const [search, setSearch] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -483,7 +478,7 @@ export function EmberDashboard() {
     setScrubIndex(Math.max(0, nextSteps.length - 1));
   }, [todayStr, granularity]);
 
-  // Individual detections passing the filters (live FIRMS pixels, historical archive, or the sample set).
+  // Individual detections passing the filters (live FIRMS pixels or the historical archive).
   // Inside the chosen area's real border (e.g. Valencia City, all of Bukidnon); if it has none, the fires within
   // NEARBY_KM of the border instead, marked as such, so spread/heatspots still show what threatens the area.
   const { fires: filteredFires, nearby: firesNearby } = useMemo(() => {
@@ -515,13 +510,8 @@ export function EmberDashboard() {
       return true;
     };
 
-    // Never pass sample fires off as real ones: while live (loading or failed) show none.
-    const source =
-      isLiveFeedActive && firmsQuery.data
-        ? firmsQuery.data.data
-        : live || place || isHistoricalMode
-          ? NO_HOTSPOTS
-          : HOTSPOTS;
+    // Live feed only: while loading or on error, show none.
+    const source = isLiveFeedActive && firmsQuery.data ? firmsQuery.data.data : NO_HOTSPOTS;
     const fires = source.filter(matchesFilter);
     if (!boundary) return { fires, nearby: false };
     return splitByBorder(fires, boundary, booleanPointInPolygon, pointToPolygonDistance);
@@ -538,7 +528,6 @@ export function EmberDashboard() {
     isLiveFeedActive,
     firmsQuery.data,
     place,
-    live,
     boundary,
   ]);
   const areaName = boundaryName ?? place?.name ?? "this area";
@@ -593,6 +582,21 @@ export function EmberDashboard() {
     retry: 1,
   });
   const spread = useMemo(() => (fireWindQuery.data ? spreadFeatures(fireWindQuery.data) : null), [fireWindQuery.data]);
+  // Proximity alert: selected point near a FIRMS fire (≤25 km) or inside a spread ellipse.
+  const guidePoint = place ?? DEFAULT_PLACE;
+  const nearestFireKm = useMemo(
+    () => (filteredFires.length ? Math.min(...filteredFires.map((h) => haversineKm(guidePoint.lat, guidePoint.lng, h.lat, h.lng))) : null),
+    [filteredFires, guidePoint.lat, guidePoint.lng],
+  );
+  const inSpread = useMemo(() => {
+    if (climate || !spreadOn || !spread) return false;
+    try {
+      return spread.features.some((f) => f.geometry.type === "Polygon" && booleanPointInPolygon([guidePoint.lng, guidePoint.lat], f.geometry));
+    } catch {
+      return false;
+    }
+  }, [climate, spreadOn, spread, guidePoint.lat, guidePoint.lng]);
+  const fireDanger = !climate && ((nearestFireKm !== null && nearestFireKm <= 25) || inSpread);
   // Wind right now at the place (or the map centre), for the sidebar readout.
   const windHere = useMemo(() => {
     if (!windQuery.data) return null;
@@ -660,19 +664,8 @@ export function EmberDashboard() {
       { padding: 110, maxZoom: 15, duration: 1800 },
     );
   }, [spreadOn, climate, fireWindQuery.data, selectedHotspot?.lat, selectedHotspot?.lng]);
-  const activeCount = harmonized
-    ? harmonizationStats.harmonizedClusterCount
-    : harmonizationStats.rawDetectionCount;
-  const highCount = harmonized
-    ? harmonizedClusters.filter((h) => h.confidence === "high" || h.isMultiSensor).length
-    : unharmonizedList.filter((h) => h.confidence === "high").length;
-  const closest = visibleHotspots.reduce(
-    (min, h) => Math.min(min, h.proximityKm),
-    visibleHotspots[0]?.proximityKm ?? 0,
-  );
 
   const liveStatus: EmberLiveStatus = useMemo(() => {
-    if (!live && !isHistoricalMode) return { mode: "sample", state: "idle" };
     if (firmsQuery.isFetching) return { mode: "live", state: "loading" };
     if (firmsQuery.isError) {
       return {
@@ -691,22 +684,22 @@ export function EmberDashboard() {
       lastSync: formattedTime,
       region: firmsQuery.data?.region,
     };
-  }, [live, isHistoricalMode, firmsQuery.isFetching, firmsQuery.isError, firmsQuery.error, firmsQuery.data]);
+  }, [isHistoricalMode, firmsQuery.isFetching, firmsQuery.isError, firmsQuery.error, firmsQuery.data]);
 
   return (
     <EmberShell active="overview" title="Overview" liveStatus={liveStatus}>
-      <section className="ember-page-heading">
-        <div>
-          <div className="ember-eyebrow">
-            <span /> FIELD OPERATIONS <span className="ember-eyebrow-date">/ NOV 13, 2026</span>
-          </div>
-          <h1>
-            Good morning, team<span>.</span>
+      <section className="flex flex-wrap items-end justify-between gap-3">
+        <div className="space-y-1">
+          <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+            <span className="size-1.5 rounded-full bg-emerald-500" /> Field operations <span className="opacity-70">/ Nov 13, 2026</span>
+          </p>
+          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+            Good morning, team.
           </h1>
-          <p>Here’s the latest across your monitored region.</p>
+          <p className="text-sm text-muted-foreground">Here’s the latest across your monitored region.</p>
         </div>
-        <div className="ember-page-actions">
-          <Button variant="outline" className="ember-export-button" asChild>
+        <div>
+          <Button variant="outline" asChild>
             <Link href="/detections">
               <Radio size={15} /> Export briefing
             </Link>
@@ -714,126 +707,58 @@ export function EmberDashboard() {
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-4" aria-label="Monitoring summary">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription className="text-xs font-medium">ACTIVE DETECTIONS</CardDescription>
-            <Flame size={16} className="text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold tabular-nums">{activeCount}</div>
-            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <Badge variant="secondary" className="gap-0.5">
-                <ArrowUpRight size={13} />{" "}
-                {harmonized ? `-${harmonizationStats.reductionPercent}%` : `${harmonizationStats.rawPixelCount} px`}
-              </Badge>
-              <span>
-                {harmonized
-                  ? `fused from ${harmonizationStats.rawDetectionCount} raw`
-                  : `unharmonized (${harmonizationStats.harmonizedClusterCount} fused)`}
-              </span>
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription className="text-xs font-medium">HIGH CONFIDENCE</CardDescription>
-            <AlertTriangle size={16} className="text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold tabular-nums">{highCount}</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              <Badge variant="outline">MODIS + VIIRS</Badge>{" "}
-              {harmonizationStats.dualSensorConfirmedCount} dual-sensor confirmed
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription className="text-xs font-medium">NEAR COMMUNITIES</CardDescription>
-            <MapPin size={16} className="text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold tabular-nums">
-              {visibleHotspots.length}
-              <span className="text-sm font-normal text-muted-foreground"> sites</span>
-            </div>
-            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
-              <Badge variant="secondary" className="gap-0.5">
-                <ArrowDownRight size={13} /> {closest.toFixed(1)} km
-              </Badge>
-              <span>closest settlement</span>
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardDescription className="text-xs font-medium">REGION CONDITIONS</CardDescription>
-            <Wind size={16} className="text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">Elevated</div>
-            <p className="mt-1 text-xs text-muted-foreground">
-              <Badge variant="outline">WIND 18 MPH</Badge> ENE · 12% humidity
-            </p>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="ember-map-section" id="map">
-        <div className="ember-section-heading">
-          <div>
-            <h2>Regional overview</h2>
-            <p>{regionLabel}</p>
+      <section className="ember-map-section space-y-3" id="map">
+        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+          <div className="space-y-0.5">
+            <h2 className="text-lg font-bold tracking-tight">Regional overview</h2>
+            <p className="text-sm text-muted-foreground">{regionLabel}</p>
           </div>
-          <div className="ember-map-heading-actions">
-            <div className="ember-map-control-group">
-            <div className="ember-window-selector" role="radiogroup" aria-label="Map view">
+          <div className="flex flex-wrap items-center gap-2">
+            <ToggleGroup
+              type="single"
+              value={mapView}
+              onValueChange={(v) => {
+                if (v === "globe" || v === "mercator") setMapView(v);
+              }}
+              aria-label="Map view"
+              className="rounded-lg border p-0.5"
+            >
               {(
                 [
-                  ["globe", "GLOBE", Globe],
-                  ["mercator", "FLAT", MapIcon],
+                  ["globe", "Globe", Globe, "3D globe view"],
+                  ["mercator", "Flat", MapIcon, "Flat map view"],
                 ] as const
-              ).map(([key, label, Icon]) => (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={mapView === key}
-                  key={key}
-                  className={mapView === key ? "selected" : ""}
-                  onClick={() => setMapView(key)}
-                  title={key === "globe" ? "3D globe view" : "Flat map view"}
-                >
-                  <Icon size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> {label}
-                </button>
+              ).map(([key, label, Icon, title]) => (
+                <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 gap-1 px-2 text-[11px]">
+                  <Icon size={12} /> {label}
+                </ToggleGroupItem>
               ))}
-            </div>
-            <div className="ember-window-selector" role="radiogroup" aria-label="Map style">
+            </ToggleGroup>
+            <ToggleGroup
+              type="single"
+              value={layers.blueMarble ? "realistic" : "normal"}
+              onValueChange={(v) => {
+                if (v === "realistic") setLayers((prev) => ({ ...prev, blueMarble: true }));
+                else if (v === "normal") setLayers((prev) => ({ ...prev, blueMarble: false }));
+              }}
+              aria-label="Map style"
+              className="rounded-lg border p-0.5"
+            >
               {(
                 [
-                  [false, "NORMAL", Layers, "Normal map: streets, labels and 3D buildings"],
-                  [true, "REALISTIC", Satellite, "Realistic: NASA GIBS Blue Marble satellite imagery"],
+                  ["normal", "Normal", Layers, "Normal map: streets, labels and 3D buildings"],
+                  ["realistic", "Realistic", Satellite, "Realistic: NASA GIBS Blue Marble satellite imagery"],
                 ] as const
-              ).map(([realistic, label, Icon, title]) => (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={layers.blueMarble === realistic}
-                  key={label}
-                  className={layers.blueMarble === realistic ? "selected" : ""}
-                  onClick={() => setLayers((prev) => ({ ...prev, blueMarble: realistic }))}
-                  title={title}
-                >
-                  <Icon size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> {label}
-                </button>
+              ).map(([key, label, Icon, title]) => (
+                <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 gap-1 px-2 text-[11px]">
+                  <Icon size={12} /> {label}
+                </ToggleGroupItem>
               ))}
-            </div>
-            </div>
-            <div className="ember-map-control-group">
+            </ToggleGroup>
             <Button
               variant="outline"
               size="sm"
-              className="ember-layer-button"
+              className="h-8 text-[11px]"
               aria-label={`Location: ${focusPlace?.name ?? "Bukidnon region"}. Search a place`}
               title="Search a place"
               onClick={() => {
@@ -842,92 +767,71 @@ export function EmberDashboard() {
                 input?.focus({ preventScroll: true });
               }}
             >
-              <MapPin size={14} /> LOCATION
-              <span style={{ fontWeight: 400, opacity: 0.75, maxWidth: "140px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <MapPin size={14} /> Location
+              <span className="max-w-[140px] truncate font-normal opacity-75">
                 {focusPlace?.name ?? "Bukidnon"}
               </span>
             </Button>
-            {view === "fires" && (
-            <>
-            <div className="ember-window-selector" aria-label="Data source">
-              <button
-                type="button"
-                aria-pressed={!live}
-                className={!live ? "selected" : ""}
-                onClick={() => {
-                  setLive(false);
-                  setPlace(null); // back to the Bukidnon sample region
-                }}
-              >
-                SAMPLE
-              </button>
-              <button
-                type="button"
-                aria-pressed={live}
-                className={live ? "selected" : ""}
-                onClick={() => {
-                  setLive(true);
-                  setWindOn(true);
-                  setHeatOn(true);
-                }}
-              >
-                {firmsQuery.isFetching ? "LOADING" : "LIVE"}
-              </button>
-            </div>
-            <div className="ember-window-selector" aria-label="Sensor layers">
-              <button
-                type="button"
-                disabled={isModisEraOnly}
-                aria-pressed={effectiveShowViirs}
-                className={effectiveShowViirs ? "selected" : ""}
-                title={isModisEraOnly ? "VIIRS launched in 2012" : "Toggle VIIRS 375m layer"}
-                style={isModisEraOnly ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
-                onClick={() => {
-                  if (!isModisEraOnly) setShowViirs(!showViirs);
-                }}
-              >
-                VIIRS
-              </button>
-              <button
-                type="button"
-                aria-pressed={showModis}
-                className={showModis ? "selected" : ""}
-                onClick={() => setShowModis(!showModis)}
-              >
-                MODIS
-              </button>
-            </div>
-            </>
-            )}
             <Button
               variant="outline"
               size="sm"
-              className="ember-layer-button"
+              className="h-8 text-[11px]"
               onClick={() => setFiltersOpen(!filtersOpen)}
             >
               <SlidersHorizontal size={14} /> Layers
             </Button>
-            </div>
           </div>
         </div>
         {view === "fires" && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge className="h-7 gap-1.5 px-2.5 text-[11px]">
+              <span className="relative flex size-1.5">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
+                <span className="relative inline-flex size-1.5 rounded-full bg-current" />
+              </span>
+              {firmsQuery.isFetching ? "Loading live feed" : "Live"}
+            </Badge>
+            <ToggleGroup
+              type="multiple"
+              value={[effectiveShowViirs ? "viirs" : "", showModis ? "modis" : ""].filter(Boolean)}
+              onValueChange={(v) => {
+                if (!isModisEraOnly) setShowViirs(v.includes("viirs"));
+                setShowModis(v.includes("modis"));
+              }}
+              aria-label="Sensor layers"
+              className="rounded-lg border p-0.5"
+            >
+              <ToggleGroupItem value="viirs" disabled={isModisEraOnly} title={isModisEraOnly ? "VIIRS launched in 2012" : "Toggle VIIRS 375m layer"} aria-label="VIIRS" className="h-7 px-2 text-[11px]">
+                VIIRS
+              </ToggleGroupItem>
+              <ToggleGroupItem value="modis" aria-label="MODIS" className="h-7 px-2 text-[11px]">
+                MODIS
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </div>
+        )}
+        {view === "fires" && (
           <Card
             aria-label="Harmonized vs Unharmonized comparison"
+            className="border-primary/30 bg-gradient-to-b from-primary/[0.07] to-transparent"
           >
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-sm">
+            <CardHeader className="p-3 pb-2">
+              <CardTitle className="flex flex-wrap items-center gap-2 text-[13px]">
+                <span className="flex size-5 items-center justify-center rounded-md bg-primary/15 text-primary">
+                  <Layers size={12} />
+                </span>
                 MODIS + VIIRS HARMONIZATION
-                <Badge variant="secondary">
+                <Badge className="font-mono text-[10px]">
                   {harmonizationStats.mergedDuplicateCount > 0
                     ? `-${harmonizationStats.reductionPercent}% duplicates merged`
                     : "Sensor-fused"}
                 </Badge>
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-[11px]">
                 Compare cross-sensor fused fire events against raw unmerged MODIS (1 km) &amp; VIIRS (375 m) detections.
               </CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="p-3 pt-0">
               <ToggleGroup
                 type="single"
                 value={harmonized ? "fused" : "raw"}
@@ -938,18 +842,24 @@ export function EmberDashboard() {
                 aria-label="Harmonization mode"
                 className="grid grid-cols-2 gap-2"
               >
-                <ToggleGroupItem value="fused" aria-label="Harmonized fused" className="h-auto flex-col items-start gap-1 border p-3">
-                  <small className="text-xs font-semibold">HARMONIZED (FUSED)</small>
-                  <div className="flex items-baseline gap-2">
-                    <strong className="text-xl tabular-nums">{harmonizationStats.harmonizedClusterCount}</strong>
-                    <span className="text-xs text-muted-foreground">{harmonizationStats.dualSensorConfirmedCount} dual-sensor · ≥96% conf</span>
+                <ToggleGroupItem value="fused" aria-label="Harmonized fused" className="h-auto flex-col items-start gap-0.5 border p-2 data-[state=on]:border-primary/60 data-[state=on]:bg-primary/[0.08] data-[state=on]:shadow-sm">
+                  <small className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-muted-foreground">
+                    <span className={`size-1.5 rounded-full ${harmonized ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                    HARMONIZED (FUSED)
+                  </small>
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <strong className="text-lg tabular-nums">{harmonizationStats.harmonizedClusterCount}</strong>
+                    <span className="text-[11px] text-muted-foreground">{harmonizationStats.dualSensorConfirmedCount} dual-sensor · ≥96% conf</span>
                   </div>
                 </ToggleGroupItem>
-                <ToggleGroupItem value="raw" aria-label="Unharmonized raw" className="h-auto flex-col items-start gap-1 border p-3">
-                  <small className="text-xs font-semibold">UNHARMONIZED (RAW)</small>
-                  <div className="flex items-baseline gap-2">
-                    <strong className="text-xl tabular-nums">{harmonizationStats.rawDetectionCount}</strong>
-                    <span className="text-xs text-muted-foreground">
+                <ToggleGroupItem value="raw" aria-label="Unharmonized raw" className="h-auto flex-col items-start gap-0.5 border p-2 data-[state=on]:border-primary/60 data-[state=on]:bg-primary/[0.08]">
+                  <small className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-muted-foreground">
+                    <span className={`size-1.5 rounded-full ${!harmonized ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
+                    UNHARMONIZED (RAW)
+                  </small>
+                  <div className="flex flex-wrap items-baseline gap-x-2">
+                    <strong className="text-lg tabular-nums">{harmonizationStats.rawDetectionCount}</strong>
+                    <span className="text-[11px] text-muted-foreground">
                       {harmonizationStats.viirsRawCount} VIIRS · {harmonizationStats.modisRawCount} MODIS
                     </span>
                   </div>
@@ -1023,6 +933,18 @@ export function EmberDashboard() {
                 </>
               }
             />
+            {fireDanger && (
+              <button
+                type="button"
+                className="ember-fire-badge"
+                onClick={() => document.getElementById("smart-action-guide")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                aria-label={`${inSpread ? "This point is in the projected fire-spread area" : `Fire within 25 km, nearest ${nearestFireKm!.toFixed(1)} km away`}. Open action guide`}
+              >
+                <Flame size={13} />
+                <span>{inSpread ? "In fire-spread area" : `Fire ${nearestFireKm!.toFixed(1)} km away`}</span>
+                <ChevronRight size={13} />
+              </button>
+            )}
             <div className="ember-map-tools">
               <Button
                 variant="ghost"
@@ -1388,7 +1310,9 @@ export function EmberDashboard() {
             setPlaying(!playing);
           }}
         />
-        <SmartActionGuide place={place ?? DEFAULT_PLACE} onLocate={handleLocate} />
+        <div id="smart-action-guide" className="scroll-mt-20">
+          <SmartActionGuide place={place ?? DEFAULT_PLACE} onLocate={handleLocate} />
+        </div>
 
       </section>
     </EmberShell>
