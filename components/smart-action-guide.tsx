@@ -1,9 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Backpack, CircleCheck, ClipboardList, LocateFixed, MapPin, Search, Thermometer, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Skeleton } from "@/components/ui/skeleton";
 import { fetchFirmsHotspots } from "@/lib/firms-client";
 import { haversineKm } from "@/lib/hotspots";
 import { buildGuide, NEARBY_KM, type HeatLevel } from "@/lib/action-guide";
@@ -73,94 +79,129 @@ export function SmartActionGuide({ place, onLocate }: { place: GuidePlace; onLoc
   });
   const loading = conditions.isLoading || hotspots.isLoading;
   const badge = HEAT_BADGE[guide.heat];
+  const closeFire = guide.nearestKm !== null && guide.nearestKm <= 5;
 
   return (
-    <div className="ember-panel" style={{ marginTop: "16px" }}>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "12px", alignItems: "flex-start", justifyContent: "space-between" }}>
-        <div>
-          <div className="ember-detail-kicker">
-            <ClipboardList size={13} /> SMART ACTION GUIDE
+    <Card className="mt-4 overflow-hidden">
+      <CardHeader className="bg-gradient-to-r from-primary/[0.07] to-transparent p-3 pb-2 sm:p-4 sm:pb-2">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <Badge variant="secondary" className="gap-1">
+              <ClipboardList size={12} /> Smart action guide
+            </Badge>
+            <CardTitle className="flex items-center gap-1.5 text-base">
+              <MapPin size={15} className="text-primary" /> {place.name}
+            </CardTitle>
+            <CardDescription className="text-[11px]">{place.region}</CardDescription>
           </div>
-          <h3 style={{ fontSize: "16px", fontWeight: 700, marginTop: "4px", display: "flex", alignItems: "center", gap: "6px" }}>
-            <MapPin size={15} /> {place.name}
-            <span style={{ fontWeight: 400, color: "var(--muted-foreground)", fontSize: "12px" }}>{place.region}</span>
-          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            <PlaceCombobox
+              className="ember-map-search"
+              style={{ position: "relative", top: 0, right: 0 }}
+              label="Search any place worldwide"
+              placeholder="Search any city or town"
+              value={query}
+              onChange={setQuery}
+              onPick={choose}
+              before={<Search size={15} />}
+            />
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={locateMe}>
+              <LocateFixed size={14} /> Use my location
+            </Button>
+          </div>
         </div>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", alignItems: "center" }}>
-          <PlaceCombobox
-            className="ember-map-search"
-            style={{ position: "relative", top: 0, right: 0 }}
-            label="Search any place worldwide"
-            placeholder="Search any city or town"
-            value={query}
-            onChange={setQuery}
-            onPick={choose}
-            before={<Search size={15} />}
-          />
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="ember-layer-button"
-            onClick={locateMe}
-          >
-            <LocateFixed size={14} /> Use my location
-          </Button>
+      </CardHeader>
+      <CardContent className="p-3 sm:p-4">
+        {message && (
+          <div role="status" className="mb-3 text-xs">
+            <span className="text-muted-foreground">{message}</span>
+          </div>
+        )}
+
+        {closeFire && (
+          <Alert variant="destructive" className="mb-4">
+            <TriangleAlert size={14} />
+            <AlertTitle>Fire within 5 km of this point</AlertTitle>
+            <AlertDescription className="flex flex-wrap items-center gap-2">
+              Nearest hotspot about {guide.nearestKm!.toFixed(1)} km away. Keep away and follow DRRMO advice.
+              <Button asChild variant="outline" size="sm">
+                <Link href="/alerts">View related alerts</Link>
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-5" aria-live="polite">
+          {loading ? (
+            <>
+              <Skeleton className="h-[52px]" />
+              <Skeleton className="h-[52px]" />
+              <Skeleton className="h-[52px]" />
+              <Skeleton className="h-[52px]" />
+              <Skeleton className="h-[52px]" />
+            </>
+          ) : (
+            <>
+              <div className="rounded-lg border bg-muted/40 p-2">
+                <p className="flex items-center gap-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+                  <Thermometer size={11} /> Temp
+                </p>
+                <p className="mt-0.5 text-lg font-bold tabular-nums">{c?.tempC != null ? `${Math.round(c.tempC)}°C` : "—"}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/40 p-2">
+                <p className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">Humidity</p>
+                <p className="mt-0.5 text-lg font-bold tabular-nums">{c?.humidity != null ? `${Math.round(c.humidity)}%` : "—"}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/40 p-2">
+                <p className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">Heat index</p>
+                <p className="mt-0.5 text-lg font-bold tabular-nums">{guide.heatIndex !== null ? `${Math.round(guide.heatIndex)}°C` : "—"}</p>
+                <Badge variant={guide.heat === "None" ? "secondary" : "destructive"} className="mt-1 h-4 px-1 text-[8px]">
+                  {badge.icon} {guide.heat === "None" ? "No heat warning" : guide.heat}
+                </Badge>
+              </div>
+              <div className="rounded-lg border bg-muted/40 p-2">
+                <p className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">Air quality</p>
+                <p className="mt-0.5 text-lg font-bold tabular-nums">{c?.usAqi != null ? `AQI ${Math.round(c.usAqi)}` : "—"}</p>
+              </div>
+              <div className="rounded-lg border bg-muted/40 p-2">
+                <p className="font-mono text-[9px] uppercase tracking-wide text-muted-foreground">Hotspots ≤ {NEARBY_KM} km</p>
+                <p className="mt-0.5 text-lg font-bold tabular-nums">{hotspots.isLoading ? "…" : hotspots.isError ? "n/a" : guide.nearbyCount}</p>
+              </div>
+            </>
+          )}
         </div>
-      </div>
 
-      {message && (
-        <div role="status" style={{ marginTop: "10px", fontSize: "12px" }}>
-          <span style={{ color: "var(--muted-foreground)" }}>{message}</span>
-        </div>
-      )}
-
-      <div style={{ display: "flex", flexWrap: "wrap", gap: "16px", marginTop: "14px", fontSize: "12px" }} aria-live="polite">
-        <span>
-          <Thermometer size={13} style={{ display: "inline", verticalAlign: "-2px" }} /> Temperature{" "}
-          <b>{c?.tempC != null ? `${Math.round(c.tempC)}°C` : loading ? "…" : "—"}</b>
-        </span>
-        <span>
-          Humidity <b>{c?.humidity != null ? `${Math.round(c.humidity)}%` : loading ? "…" : "—"}</b>
-        </span>
-        <span>
-          Heat index <b>{guide.heatIndex !== null ? `${Math.round(guide.heatIndex)}°C` : loading ? "…" : "—"}</b>{" "}
-          <span style={{ color: badge.color, fontWeight: 700 }}>
-            {badge.icon} {guide.heat === "None" ? "No heat warning" : guide.heat}
-          </span>
-        </span>
-        <span>
-          Air quality <b>{c?.usAqi != null ? `AQI ${Math.round(c.usAqi)}` : loading ? "…" : "—"}</b>
-        </span>
-        <span>
-          Hotspots ≤ {NEARBY_KM} km <b>{hotspots.isLoading ? "…" : hotspots.isError ? "n/a" : guide.nearbyCount}</b>
-        </span>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: "16px", marginTop: "16px" }}>
-        <GuideList icon={<TriangleAlert size={14} />} title="Environmental update" items={guide.update} />
-        <GuideList icon={<CircleCheck size={14} />} title="What to do" items={guide.todo} />
-        <GuideList icon={<Backpack size={14} />} title="What to bring" items={guide.bring} />
-        <GuideList icon={<ClipboardList size={14} />} title="What to prepare" items={guide.prepare} />
-      </div>
-      <p style={{ fontSize: "10px", color: "var(--muted-foreground)", marginTop: "12px" }}>
-        General guidance only. Follow your local DRRMO and health authorities. Weather and air quality: Open-Meteo. Hotspots: NASA FIRMS (last 48 h).
-      </p>
-    </div>
+        <Accordion type="multiple" defaultValue={["update", "todo"]} className="mt-3">
+          <GuideSection value="update" icon={<TriangleAlert size={13} />} tint="bg-amber-500/15 text-amber-600 dark:text-amber-400" title="Environmental update" items={guide.update} />
+          <GuideSection value="todo" icon={<CircleCheck size={13} />} tint="bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" title="What to do" items={guide.todo} />
+          <GuideSection value="bring" icon={<Backpack size={13} />} tint="bg-sky-500/15 text-sky-600 dark:text-sky-400" title="What to bring" items={guide.bring} />
+          <GuideSection value="prepare" icon={<ClipboardList size={13} />} tint="bg-violet-500/15 text-violet-600 dark:text-violet-400" title="What to prepare" items={guide.prepare} />
+        </Accordion>
+        <p className="mt-3 text-[10px] text-muted-foreground">
+          General guidance only, based on WHO fire-safety principles and aligned with RA 9514 (BFP). Follow your local DRRMO and health authorities. Weather and air quality: Open-Meteo. Hotspots: NASA FIRMS (last 48 h).
+        </p>
+      </CardContent>
+    </Card>
   );
 }
 
-function GuideList({ icon, title, items }: { icon: React.ReactNode; title: string; items: string[] }) {
+function GuideSection({ value, icon, tint, title, items }: { value: string; icon: React.ReactNode; tint: string; title: string; items: string[] }) {
   return (
-    <section aria-label={title}>
-      <h4 style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 700, marginBottom: "6px" }}>
-        {icon} {title}
-      </h4>
-      <ul style={{ listStyle: "disc", paddingLeft: "18px", fontSize: "12px", lineHeight: 1.55 }}>
-        {items.map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    </section>
+    <AccordionItem value={value}>
+      <AccordionTrigger className="text-xs font-bold hover:no-underline">
+        <span className="flex items-center gap-2">
+          <span className={`flex size-6 items-center justify-center rounded-md ${tint}`}>{icon}</span>
+          {title}
+          <Badge variant="secondary" className="h-4 px-1 font-mono text-[9px]">{items.length}</Badge>
+        </span>
+      </AccordionTrigger>
+      <AccordionContent>
+        <ul className="list-disc pl-[18px] text-xs leading-relaxed">
+          {items.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      </AccordionContent>
+    </AccordionItem>
   );
 }

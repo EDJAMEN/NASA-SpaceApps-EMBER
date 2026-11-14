@@ -23,8 +23,8 @@ Stat row: `Temperature`, `Humidity`, `Heat index + badge (○/▲/▲▲/◆/✖
 - Wind ≥ 20 km/h adds spread warning. AQI > 100 adds smoke advice + N95.
 
 ### Fire within 5 km (close)
-- Above plus: `Keep away, don't fight large fires. Be ready to leave if told.`
-- `What to bring` adds N95 if smoke. `What to prepare` adds go-bag + evacuation route.
+- Above plus RACE: move people out first, raise alarm, confine (close doors/windows), extinguisher only if trained with an exit, else evacuate.
+- `What to bring` adds extinguisher (if trained) + N95 if smoke. `What to prepare` adds smoke alarm access, go-bag, route + meeting point, assist vulnerable, home drill.
 
 ### Feed down (`hotspots === null`)
 - Update: `Satellite hotspot data unavailable.` Heat/AQI guidance still renders.
@@ -34,7 +34,7 @@ Stat row: `Temperature`, `Humidity`, `Heat index + badge (○/▲/▲▲/◆/✖
 Caution+ adds hydration + hat/clothing. Extreme Caution+ adds limit 10AM–4PM + check vulnerable. Danger+ adds heat-stroke warning + ORS.
 
 ## Footer (always)
-`General guidance only. Follow your local DRRMO and health authorities. Weather and air quality: Open-Meteo. Hotspots: NASA FIRMS (last 48 h).`
+`General guidance only, based on WHO fire-safety principles and aligned with RA 9514 (BFP). Follow your local DRRMO and health authorities. Weather and air quality: Open-Meteo. Hotspots: NASA FIRMS (last 48 h).`
 
 ## Do not break
 - Count = `haversineKm(place, hotspot) ≤ 25`, 48-h window only.

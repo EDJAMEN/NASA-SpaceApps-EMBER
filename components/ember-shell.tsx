@@ -145,19 +145,6 @@ export function EmberShell({
               })}
             </SidebarMenu>
           </SidebarGroup>
-          <SidebarGroup>
-            <SidebarGroupLabel>Monitoring</SidebarGroupLabel>
-            <div className="flex items-center gap-2 rounded-lg border border-emerald-500/25 bg-emerald-500/[0.06] px-3 py-2 text-sm">
-              <span className="relative flex size-2 shrink-0">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-500 opacity-60" />
-                <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
-              </span>
-              <div className="grid flex-1 leading-tight">
-                <p className="text-xs font-medium">FIRMS connection</p>
-                <span className="truncate text-xs text-muted-foreground">{sidebarSubtitle}</span>
-              </div>
-            </div>
-          </SidebarGroup>
         </SidebarContent>
         <SidebarFooter>
           <SidebarMenu>

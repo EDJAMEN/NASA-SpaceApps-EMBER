@@ -787,6 +787,7 @@ export function EmberMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || styleVersion === 0) return;
+    if (!map.isStyleLoaded()) return; // mid-reload (e.g. dark toggle): style.load re-runs this effect
     const drop = () => {
       if (!map.style) return; // map already removed (leaving the page): nothing to clean up
       if (map.getLayer("ember-wind-field")) map.removeLayer("ember-wind-field");
@@ -811,7 +812,7 @@ export function EmberMap({
       }
     }
     ictx.putImageData(data, 0, 0);
-    const beforeLabels = map.getStyle().layers.find((l) => l.type === "symbol" && !l.id.startsWith("ember-"))?.id;
+    const beforeLabels = map.getStyle()?.layers?.find((l) => l.type === "symbol" && !l.id.startsWith("ember-"))?.id;
     map.addSource("ember-wind-field", {
       type: "image",
       url: img.toDataURL("image/png"),
