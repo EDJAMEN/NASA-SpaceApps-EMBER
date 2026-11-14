@@ -1329,7 +1329,7 @@ export function EmberDashboard() {
               </Button>
             </div>
             <div className="ember-incident-list">
-              {visibleHotspots.slice(0, 5).map((hotspot) => {
+              {visibleHotspots.map((hotspot) => {
                 const active = selectedHotspot?.id === hotspot.id;
                 return (
                   <button

@@ -258,7 +258,7 @@ async function fetchAreaCsvSource(params: {
   const areaBbox = `${minLon.toFixed(4)},${minLat.toFixed(4)},${maxLon.toFixed(4)},${maxLat.toFixed(4)}`;
   const clampedChunk = Math.max(1, Math.min(5, days));
   const url = `https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(key)}/${firmsSource}/${areaBbox}/${clampedChunk}/${startDate}`;
-  const res = await fetch(url, { next: { revalidate: 300 }, signal: AbortSignal.timeout(12_000) });
+  const res = await fetch(url, { next: { revalidate: 300 }, signal: AbortSignal.timeout(8_000) });
   if (!res.ok) {
     throw new Error(`FIRMS Area ${firmsSource} responded ${res.status}`);
   }
@@ -281,6 +281,40 @@ function dedupeHotspots(items: Hotspot[], maxItems = 4000): Hotspot[] {
     if (deduped.length >= maxItems) break;
   }
   return deduped;
+}
+
+// Both local envs, deduped. First key is tried first; the other is the fallback when FIRMS rejects it.
+function firmKeys(): string[] {
+  const keys = [process.env.FIRMS_MAP_KEY?.trim(), process.env.NASA_FIRMS_MAP_KEY?.trim()].filter(
+    (k): k is string => !!k,
+  );
+  return [...new Set(keys)];
+}
+
+// Run fn with each key until one succeeds (e.g. first key expired or over quota).
+async function withFirmKeys<T>(fn: (key: string) => Promise<T>, keys: string[]): Promise<T> {
+  let lastError: unknown = null;
+  for (const key of keys) {
+    try {
+      return await fn(key);
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error("Failed to fetch FIRMS feeds");
+}
+
+// Retry the whole NRT range with the fallback key only when nothing succeeded (likely a bad key, not empty ocean).
+async function fetchNrtAreaRangeWithFallback(
+  params: Omit<Parameters<typeof fetchNrtAreaRange>[0], "key"> & { keys: string[] },
+): Promise<Awaited<ReturnType<typeof fetchNrtAreaRange>>> {
+  const { keys, ...rest } = params;
+  let last = await fetchNrtAreaRange({ ...rest, key: keys[0]! });
+  for (const key of keys.slice(1)) {
+    if (last.succeeded > 0) break;
+    last = await fetchNrtAreaRange({ ...rest, key });
+  }
+  return last;
 }
 
 async function fetchNrtAreaRange(params: {
@@ -352,7 +386,7 @@ async function fetchNrtAreaRange(params: {
 }
 
 export async function GET(request: NextRequest) {
-  const key = process.env.FIRMS_MAP_KEY?.trim() || process.env.NASA_FIRMS_MAP_KEY?.trim();
+  const keys = firmKeys();
   const { searchParams } = request.nextUrl;
   const bbox = parseBbox(searchParams.get("bbox"));
   const windowParam = searchParams.get("window") === "7d" ? "7d" : "24h";
@@ -416,9 +450,9 @@ export async function GET(request: NextRequest) {
       ? "MODIS Era Only (1km) · Harmonized to VIIRS-equivalent scale"
       : null;
 
-    if (!modisEraOnly && ageDays <= 10 && key) {
-      const { rows: deduped, succeeded } = await fetchNrtAreaRange({
-        key,
+    if (!modisEraOnly && ageDays <= 10 && keys.length > 0) {
+      const { rows: deduped, succeeded } = await fetchNrtAreaRangeWithFallback({
+        keys,
         bbox,
         startDate: clampedDate,
         days: requestedDays,
@@ -448,7 +482,7 @@ export async function GET(request: NextRequest) {
     // and fall back cleanly to deterministic historical Bukidnon/Mindanao archive data.
     let archiveRows: Hotspot[] = [];
     let dataSource: FirmsHotspotsPayload["dataSource"] = "historical-archive";
-    if (ageDays > 60 && requestedDays <= 5 && key) {
+    if (ageDays > 60 && requestedDays <= 5 && keys.length > 0) {
       const spSources: Array<{ firmsSource: string; sensor: SensorSource }> = [];
       if (sensorFilter !== "VIIRS") spSources.push({ firmsSource: "MODIS_SP", sensor: "MODIS" });
       if (!modisEraOnly && sensorFilter !== "MODIS") {
@@ -458,16 +492,20 @@ export async function GET(request: NextRequest) {
       }
       const spSettled = await Promise.allSettled(
         spSources.map((src) =>
-          fetchAreaCsvSource({
-            key,
-            firmsSource: src.firmsSource,
-            sensor: src.sensor,
-            bbox,
-            startDate: clampedDate,
-            days: requestedDays,
-            endDate,
-            ref,
-          }),
+          withFirmKeys(
+            (k) =>
+              fetchAreaCsvSource({
+                key: k,
+                firmsSource: src.firmsSource,
+                sensor: src.sensor,
+                bbox,
+                startDate: clampedDate,
+                days: requestedDays,
+                endDate,
+                ref,
+              }),
+            keys,
+          ),
         ),
       );
       for (const r of spSettled) {
@@ -510,16 +548,18 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  if (!key) {
+  if (keys.length === 0) {
     return NextResponse.json(
       { error: "FIRMS_MAP_KEY is not configured in .env.local", data: [] },
       { status: 503 },
     );
   }
 
+  // Live NRT path: never leak a raw 500 — any surprise becomes a 502 JSON the panel handles.
   let merged: Hotspot[] = [];
   let errors: string[] = [];
   let dataSource: FirmsHotspotsPayload["dataSource"] = "firms-wfs";
+  try {
 
   // NASA FIRMS MapServer WFS rejects /wfs/Global/ with "unsupported." — use WFS for SouthEast_Asia and Area CSV globally (plus fallback).
   if (region === "SouthEast_Asia") {
@@ -534,7 +574,9 @@ export async function GET(request: NextRequest) {
     }
 
     const results = await Promise.allSettled(
-      layers.map((layer) => fetchWfsLayer(key, region, layer.typename, layer.source, bbox, ref)),
+      layers.map((layer) =>
+        withFirmKeys((k) => fetchWfsLayer(k, region, layer.typename, layer.source, bbox, ref), keys),
+      ),
     );
 
     results.forEach((result) => {
@@ -553,8 +595,8 @@ export async function GET(request: NextRequest) {
   if (region === "Global" || (merged.length === 0 && errors.length > 0)) {
     const areaDays = windowParam === "7d" ? 7 : 2;
     const areaStart = addDaysIso(todayStr, -(areaDays - 1));
-    const areaRes = await fetchNrtAreaRange({
-      key,
+    const areaRes = await fetchNrtAreaRangeWithFallback({
+      keys,
       bbox,
       startDate: areaStart,
       days: areaDays,
@@ -601,4 +643,10 @@ export async function GET(request: NextRequest) {
       "X-Cache": "MISS",
     },
   });
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Failed to fetch FIRMS feeds", data: [] },
+      { status: 502 },
+    );
+  }
 }
