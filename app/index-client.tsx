@@ -1172,11 +1172,9 @@ export function EmberDashboard() {
           </div>
 
           <aside className="ember-incident-panel" id="incidents">
-            <div style={{ padding: "12px 14px", borderBottom: "1px solid var(--border)" }}>
-              <div className="ember-sort-label" style={{ padding: 0, marginBottom: "8px" }}>
-                <span>SHOW ON MAP</span>
-              </div>
-              <div className="ember-window-selector" role="radiogroup" aria-label="What to show on the map" style={{ width: "100%", display: "flex" }}>
+            <section className="ember-panel-section" aria-labelledby="ember-layers-title">
+              <h3 className="ember-group-title" id="ember-layers-title"><span>Map view</span></h3>
+              <div className="ember-window-selector" role="radiogroup" aria-label="What to show on the map">
                 {(
                   [
                     ["fires", "Wildfires", Flame],
@@ -1191,18 +1189,15 @@ export function EmberDashboard() {
                     key={key}
                     className={view === key ? "selected" : ""}
                     onClick={() => setView(key)}
-                    style={{ flex: 1 }}
                   >
                     <Icon size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> {label}
                   </button>
                 ))}
               </div>
               {view === "fires" && (
-                <div style={{ marginTop: "12px" }}>
-                  <div className="ember-sort-label" style={{ padding: 0, marginBottom: "8px" }}>
-                    <span>WIND &amp; FIRE SPREAD</span>
-                  </div>
-                  <div className="ember-window-selector" aria-label="Wind and fire overlays" style={{ width: "100%", display: "flex" }}>
+                <div>
+                  <h3 className="ember-group-title" style={{ marginBottom: "8px" }}><span>Overlays</span></h3>
+                  <div className="ember-window-selector" aria-label="Wind and fire overlays">
                     {(
                       [
                         ["Wind", windOn, setWindOn, windQuery.isFetching, "Animated live wind, coloured by speed"],
@@ -1232,41 +1227,38 @@ export function EmberDashboard() {
                           }}
                         />
                         {label}
-                        <small style={{ fontSize: "9px", opacity: 0.8 }}>{on ? (busy ? "…" : "ON") : "OFF"}</small>
+                        {busy ? <small style={{ fontSize: "9px", opacity: 0.8 }}>…</small> : null}
                       </button>
                     ))}
                   </div>
                   {windOn && (
-                    <div style={{ marginTop: "10px", fontSize: "12px" }}>
+                    <div className="ember-wind-readout" style={{ marginTop: "10px" }}>
                       {windQuery.isError ? (
-                        <span style={{ opacity: 0.75 }}>Live wind is unavailable right now (weather service limit or offline). Try again in a minute.</span>
+                        <span style={{ opacity: 0.75 }}>Wind unavailable. Try again in a minute.</span>
                       ) : windHere ? (
                         <b>
-                          Wind {Math.round(windHere.speed)} km/h from the {windHere.from}, pushing fire {windHere.toward}
-                          {place ? ` · at ${place.name}` : " · map centre"}
+                          {Math.round(windHere.speed)} km/h from {windHere.from} → pushing {windHere.toward}
+                          {place ? ` · ${place.name}` : ""}
                         </b>
                       ) : (
-                        <span style={{ opacity: 0.75 }}>Loading live wind…</span>
+                        <span style={{ opacity: 0.75 }}>Loading wind…</span>
                       )}
                       <div
+                        className="ember-wind-scale"
+                        title={`10 m above ground · ${windQuery.data?.run ?? "NOAA GFS"}`}
                         style={{
-                          marginTop: "6px",
-                          height: "8px",
-                          borderRadius: "2px",
                           background: `linear-gradient(to right, ${WIND_SCALE.map(([, c]) => c).join(", ")})`,
                         }}
                       />
-                      <div style={{ display: "flex", fontSize: "10px", opacity: 0.75 }}>
-                        {WIND_SCALE.map(([min]) => (
-                          <span key={min} style={{ flex: 1 }}>{min}</span>
-                        ))}
+                      <div className="ember-wind-ticks">
+                        <span>{WIND_SCALE[0][0]}</span>
+                        <span style={{ textAlign: "right" }}>{WIND_SCALE[WIND_SCALE.length - 1][0]}+ km/h</span>
                       </div>
-                      <small style={{ fontSize: "10px", opacity: 0.75 }}>km/h · 10 m above ground · {windQuery.data?.run ?? "NOAA GFS"}</small>
                     </div>
                   )}
                   {spreadOn && (
                     <div style={{ marginTop: "10px", fontSize: "12px" }}>
-                      <div style={{ display: "flex", gap: "12px" }}>
+                      <div className="ember-spread-key">
                         {([["+1 h", "#e3211c"], ["+3 h", "#ff8c1a"], ["+6 h", "#ffd000"]] as const).map(([t, c]) => (
                           <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
                             <i style={{ width: "10px", height: "10px", borderRadius: "2px", background: c, opacity: 0.8 }} /> {t}
@@ -1275,12 +1267,10 @@ export function EmberDashboard() {
                       </div>
                       <small style={{ display: "block", fontSize: "10px", opacity: 0.75, marginTop: "4px" }}>
                         {fireWindQuery.isError
-                          ? "Wind forecast unavailable right now."
+                          ? "Forecast unavailable."
                           : spreadFires.length === 0
-                            ? place && boundary
-                              ? `No fires inside ${areaName} or within ${NEARBY_KM} km of it in this time window. Try the 7-day timeline or another area.`
-                              : "No fires to project in this view."
-                            : `Projected for the ${spreadFires.length} strongest fires from the hourly wind forecast (head fire ≈ 10% of wind speed). Ignores fuel and slope; hover an area for details.`}
+                            ? "No fires to project here."
+                            : `Next 6 h for ${spreadFires.length} strongest fires.`}
                       </small>
                     </div>
                   )}
@@ -1294,7 +1284,7 @@ export function EmberDashboard() {
                   )}
                 </div>
               )}
-            </div>
+            </section>
             {climate && focusPlace ? (
               <ClimatePanel
                 view={view as "temperature" | "heatindex"}
@@ -1325,8 +1315,8 @@ export function EmberDashboard() {
                 </div>
                 <p>
                   {harmonized
-                    ? "Fused MODIS (1km) + VIIRS (375m) fire events"
-                    : "Unharmonized individual satellite pixels"}
+                    ? "MODIS + VIIRS fused · sorted by nearest settlement"
+                    : "Satellite pixels · sorted by nearest settlement"}
                 </p>
               </div>
               <Button
@@ -1337,10 +1327,6 @@ export function EmberDashboard() {
               >
                 <MoreHorizontal size={18} />
               </Button>
-            </div>
-            <div className="ember-sort-label">
-              <span>NEAREST SETTLEMENT</span>
-              <ArrowDownRight size={13} />
             </div>
             <div className="ember-incident-list">
               {visibleHotspots.map((hotspot) => {
@@ -1367,19 +1353,16 @@ export function EmberDashboard() {
                         >
                           {BADGE_OF[hotspot.confidence]}
                         </i>
+                        <b style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: "9px", fontWeight: 600 }}>{hotspot.proximityKm.toFixed(1)} km</b>
                       </span>
-                      <span className="ember-incident-area">{place ? hotspot.settlement : hotspot.municipality === "Regional" ? hotspot.settlement : `${hotspot.municipality}, Bukidnon`}</span>
+                      {!hotspot.name.startsWith("Sector") && (
+                        <span className="ember-incident-area">{place ? hotspot.settlement : hotspot.municipality === "Regional" ? hotspot.settlement : `${hotspot.municipality}, Bukidnon`}</span>
+                      )}
                       <span className="ember-incident-meta">
-                        {hotspot.acqTime}
-                        <span>·</span>
-                        {(hotspot.sources ?? [hotspot.source]).join(" + ")}
-                        <span>·</span>
                         {hotspot.count} {harmonized ? "detections" : "px"}
+                        <span>·</span>
+                        {hotspot.acqTime}
                       </span>
-                    </span>
-                    <span className="ember-incident-distance">
-                      <b>{hotspot.proximityKm.toFixed(1)} km</b>
-                      <small>from town</small>
                     </span>
                   </button>
                 );
@@ -1394,23 +1377,22 @@ export function EmberDashboard() {
             {selectedHotspot && (
               <div className="ember-selected-detail">
                 <div className="ember-detail-kicker">
-                  <Sparkles size={13} /> SELECTED CLUSTER
+                  <Sparkles size={13} /> SELECTED FIRE
                 </div>
                 <div className="ember-detail-title">
                   {selectedHotspot.name}
                   <span className="ember-detail-status">
-                    {BADGE_OF[selectedHotspot.confidence]} confidence
+                    {BADGE_OF[selectedHotspot.confidence]}
                     {selectedHotspot.fusedConfidencePercent !== undefined &&
                       ` · ${selectedHotspot.fusedConfidencePercent}%`}
                   </span>
                 </div>
                 <p>
-                  {selectedHotspot.settlement} · {selectedHotspot.proximityKm.toFixed(1)} km from
-                  nearest settlement
+                  {selectedHotspot.proximityKm.toFixed(1)} km from nearest town
                 </p>
                 <div className="ember-detail-stats">
                   <span>
-                    <b>{selectedHotspot.count}</b> thermal pixels
+                    <b>{selectedHotspot.count}</b> hotspots
                   </span>
                   <span>
                     <Radio size={13} />{" "}
@@ -1419,9 +1401,6 @@ export function EmberDashboard() {
                     {selectedHotspot.frp !== undefined && ` · ${selectedHotspot.frp} MW`}
                   </span>
                 </div>
-                <p style={{ marginTop: "8px" }}>
-                  POINT({selectedHotspot.lng} {selectedHotspot.lat}) · SRID 4326
-                </p>
               </div>
             )}
               </>
