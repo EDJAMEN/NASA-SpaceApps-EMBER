@@ -521,6 +521,7 @@ export function EmberMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || styleVersion === 0) return;
+    if (!map.isStyleLoaded()) return; // mid-reload (e.g. dark toggle): style.load re-runs this effect
 
     const styleLayers = map.getStyle()?.layers ?? [];
     for (const lyr of styleLayers) {

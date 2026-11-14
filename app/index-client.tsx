@@ -31,6 +31,10 @@ import {
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 const EmberMap = dynamic(() => import("@/components/ember-map").then((m) => m.EmberMap), {
   ssr: false,
 });
@@ -703,76 +707,70 @@ export function EmberDashboard() {
         </div>
       </section>
 
-      <section className="ember-stat-grid" aria-label="Monitoring summary">
-        <article className="ember-stat">
-          <div className="ember-stat-top">
-            <span>ACTIVE DETECTIONS</span>
-            <span className="ember-stat-icon ember-icon-coral">
-              <Flame size={16} />
-            </span>
-          </div>
-          <div className="ember-stat-number">{activeCount}</div>
-          <div className="ember-stat-foot">
-            <span className="ember-change ember-up">
-              <ArrowUpRight size={13} />{" "}
-              {harmonized ? `-${harmonizationStats.reductionPercent}%` : `${harmonizationStats.rawPixelCount} px`}
-            </span>
-            <span>
-              {harmonized
-                ? `fused from ${harmonizationStats.rawDetectionCount} raw detections`
-                : `unharmonized (${harmonizationStats.harmonizedClusterCount} when harmonized)`}
-            </span>
-          </div>
-        </article>
-        <article className="ember-stat">
-          <div className="ember-stat-top">
-            <span>HIGH CONFIDENCE</span>
-            <span className="ember-stat-icon ember-icon-amber">
-              <AlertTriangle size={16} />
-            </span>
-          </div>
-          <div className="ember-stat-number">{highCount}</div>
-          <div className="ember-stat-foot">
-            <span className="ember-change ember-neutral">MODIS + VIIRS</span>
-            <span>
+      <section className="grid gap-4 md:grid-cols-4" aria-label="Monitoring summary">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardDescription className="text-xs font-medium">ACTIVE DETECTIONS</CardDescription>
+            <Flame size={16} className="text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">{activeCount}</div>
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <Badge variant="secondary" className="gap-0.5">
+                <ArrowUpRight size={13} />{" "}
+                {harmonized ? `-${harmonizationStats.reductionPercent}%` : `${harmonizationStats.rawPixelCount} px`}
+              </Badge>
+              <span>
+                {harmonized
+                  ? `fused from ${harmonizationStats.rawDetectionCount} raw`
+                  : `unharmonized (${harmonizationStats.harmonizedClusterCount} fused)`}
+              </span>
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardDescription className="text-xs font-medium">HIGH CONFIDENCE</CardDescription>
+            <AlertTriangle size={16} className="text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">{highCount}</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              <Badge variant="outline">MODIS + VIIRS</Badge>{" "}
               {harmonizationStats.dualSensorConfirmedCount} dual-sensor confirmed
-            </span>
-          </div>
-        </article>
-        <article className="ember-stat">
-          <div className="ember-stat-top">
-            <span>NEAR COMMUNITIES</span>
-            <span className="ember-stat-icon ember-icon-sky">
-              <MapPin size={16} />
-            </span>
-          </div>
-          <div className="ember-stat-number">
-            {visibleHotspots.length}
-            <span className="ember-stat-unit"> sites</span>
-          </div>
-          <div className="ember-stat-foot">
-            <span className="ember-change ember-up">
-              <ArrowDownRight size={13} /> {closest.toFixed(1)} km
-            </span>
-            <span>closest settlement</span>
-          </div>
-        </article>
-        <article className="ember-stat">
-          <div className="ember-stat-top">
-            <span>REGION CONDITIONS</span>
-            <span className="ember-stat-icon ember-icon-green">
-              <Wind size={16} />
-            </span>
-          </div>
-          <div className="ember-stat-weather">
-            <strong>Elevated</strong>
-            <span className="ember-weather-dot" />
-          </div>
-          <div className="ember-stat-foot">
-            <span className="ember-change ember-neutral">WIND 18 MPH</span>
-            <span>ENE · 12% humidity</span>
-          </div>
-        </article>
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardDescription className="text-xs font-medium">NEAR COMMUNITIES</CardDescription>
+            <MapPin size={16} className="text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold tabular-nums">
+              {visibleHotspots.length}
+              <span className="text-sm font-normal text-muted-foreground"> sites</span>
+            </div>
+            <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+              <Badge variant="secondary" className="gap-0.5">
+                <ArrowDownRight size={13} /> {closest.toFixed(1)} km
+              </Badge>
+              <span>closest settlement</span>
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardDescription className="text-xs font-medium">REGION CONDITIONS</CardDescription>
+            <Wind size={16} className="text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">Elevated</div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              <Badge variant="outline">WIND 18 MPH</Badge> ENE · 12% humidity
+            </p>
+          </CardContent>
+        </Card>
       </section>
 
       <section className="ember-map-section" id="map">
@@ -906,57 +904,52 @@ export function EmberDashboard() {
           </div>
         </div>
         {view === "fires" && (
-          <div
-            className="ember-harmonize-bar"
-            role="region"
+          <Card
             aria-label="Harmonized vs Unharmonized comparison"
           >
-            <div className="ember-harmonize-bar-info">
-              <div className="ember-harmonize-bar-title">
-                <span>MODIS + VIIRS HARMONIZATION</span>
-                <span className="ember-harmonize-delta">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-sm">
+                MODIS + VIIRS HARMONIZATION
+                <Badge variant="secondary">
                   {harmonizationStats.mergedDuplicateCount > 0
                     ? `-${harmonizationStats.reductionPercent}% duplicates merged`
                     : "Sensor-fused"}
-                </span>
-              </div>
-              <p>
+                </Badge>
+              </CardTitle>
+              <CardDescription>
                 Compare cross-sensor fused fire events against raw unmerged MODIS (1 km) &amp; VIIRS (375 m) detections.
-              </p>
-            </div>
-            <div className="ember-harmonize-bar-actions" role="radiogroup" aria-label="Harmonization mode">
-              <button
-                type="button"
-                role="radio"
-                aria-checked={harmonized}
-                className={`ember-harmonize-card ${harmonized ? "active" : ""}`}
-                title="Harmonized: deduplicates overlapping MODIS (1km) + VIIRS (375m) passes into unified fire events"
-                onClick={() => setHarmonized(true)}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ToggleGroup
+                type="single"
+                value={harmonized ? "fused" : "raw"}
+                onValueChange={(v) => {
+                  if (v === "fused") setHarmonized(true);
+                  else if (v === "raw") setHarmonized(false);
+                }}
+                aria-label="Harmonization mode"
+                className="grid grid-cols-2 gap-2"
               >
-                <small>HARMONIZED (FUSED)</small>
-                <div className="ember-harmonize-card-metric">
-                  <strong>{harmonizationStats.harmonizedClusterCount}</strong>
-                  <span>{harmonizationStats.dualSensorConfirmedCount} dual-sensor · ≥96% conf</span>
-                </div>
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={!harmonized}
-                className={`ember-harmonize-card ${!harmonized ? "active" : ""}`}
-                title="Unharmonized: shows raw individual MODIS and VIIRS satellite pixel detections before fusion"
-                onClick={() => setHarmonized(false)}
-              >
-                <small>UNHARMONIZED (RAW)</small>
-                <div className="ember-harmonize-card-metric">
-                  <strong>{harmonizationStats.rawDetectionCount}</strong>
-                  <span>
-                    {harmonizationStats.viirsRawCount} VIIRS · {harmonizationStats.modisRawCount} MODIS
-                  </span>
-                </div>
-              </button>
-            </div>
-          </div>
+                <ToggleGroupItem value="fused" aria-label="Harmonized fused" className="h-auto flex-col items-start gap-1 border p-3">
+                  <small className="text-xs font-semibold">HARMONIZED (FUSED)</small>
+                  <div className="flex items-baseline gap-2">
+                    <strong className="text-xl tabular-nums">{harmonizationStats.harmonizedClusterCount}</strong>
+                    <span className="text-xs text-muted-foreground">{harmonizationStats.dualSensorConfirmedCount} dual-sensor · ≥96% conf</span>
+                  </div>
+                </ToggleGroupItem>
+                <ToggleGroupItem value="raw" aria-label="Unharmonized raw" className="h-auto flex-col items-start gap-1 border p-3">
+                  <small className="text-xs font-semibold">UNHARMONIZED (RAW)</small>
+                  <div className="flex items-baseline gap-2">
+                    <strong className="text-xl tabular-nums">{harmonizationStats.rawDetectionCount}</strong>
+                    <span className="text-xs text-muted-foreground">
+                      {harmonizationStats.viirsRawCount} VIIRS · {harmonizationStats.modisRawCount} MODIS
+                    </span>
+                  </div>
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </CardContent>
+          </Card>
         )}
         <div className="ember-map-layout">
           <div
@@ -1171,120 +1164,111 @@ export function EmberDashboard() {
             </div>
           </div>
 
-          <aside className="ember-incident-panel" id="incidents">
-            <section className="ember-panel-section" aria-labelledby="ember-layers-title">
-              <h3 className="ember-group-title" id="ember-layers-title"><span>Map view</span></h3>
-              <div className="ember-window-selector" role="radiogroup" aria-label="What to show on the map">
-                {(
-                  [
-                    ["fires", "Wildfires", Flame],
-                    ["temperature", "Temperature", Thermometer],
-                    ["heatindex", "Heat index", Droplets],
-                  ] as const
-                ).map(([key, label, Icon]) => (
-                  <button
-                    type="button"
-                    role="radio"
-                    aria-checked={view === key}
-                    key={key}
-                    className={view === key ? "selected" : ""}
-                    onClick={() => setView(key)}
-                  >
-                    <Icon size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> {label}
-                  </button>
-                ))}
-              </div>
-              {view === "fires" && (
-                <div>
-                  <h3 className="ember-group-title" style={{ marginBottom: "8px" }}><span>Overlays</span></h3>
-                  <div className="ember-window-selector" aria-label="Wind and fire overlays">
+          <aside className="ember-incident-panel gap-3 bg-transparent p-3" id="incidents">
+            <Card className={climate ? "border-0 bg-transparent shadow-none" : undefined}>
+              <CardHeader className="space-y-1.5 p-2.5">
+                <Tabs value={view} onValueChange={(v) => setView(v as OverviewView)} aria-label="What to show on the map">
+                  <TabsList className="grid h-8 w-full grid-cols-3">
                     {(
                       [
-                        ["Wind", windOn, setWindOn, windQuery.isFetching, "Animated live wind, coloured by speed"],
-                        ["Spread", spreadOn, setSpreadOn, fireWindQuery.isFetching, "Where the wind pushes each fire in 1, 3 and 6 h"],
-                        ["Heatspots", heatOn, setHeatOn, false, "Heat glow of the detections"],
+                        ["fires", "Wildfires", Flame],
+                        ["temperature", "Temperature", Thermometer],
+                        ["heatindex", "Heat index", Droplets],
                       ] as const
-                    ).map(([label, on, set, busy, title]) => (
-                      <button
-                        type="button"
-                        key={label}
-                        aria-pressed={on}
-                        className={on ? "selected" : ""}
-                        title={`${title} (click to turn ${on ? "off" : "on"})`}
-                        onClick={() => set(!on)}
-                        style={{ flex: 1, display: "inline-flex", alignItems: "center", justifyContent: "center", gap: "5px" }}
-                      >
-                        {/* Explicit state: these start ON in live mode, so a plain highlight was easy to misread. */}
-                        <i
-                          aria-hidden
-                          style={{
-                            width: "7px",
-                            height: "7px",
-                            borderRadius: "50%",
-                            background: on ? "#4cc36a" : "transparent",
-                            border: `1.5px solid ${on ? "#4cc36a" : "currentColor"}`,
-                            opacity: on ? 1 : 0.6,
-                          }}
-                        />
-                        {label}
-                        {busy ? <small style={{ fontSize: "9px", opacity: 0.8 }}>…</small> : null}
-                      </button>
+                    ).map(([key, label, Icon]) => (
+                      <TabsTrigger key={key} value={key} className="h-7 gap-1 px-1 text-[11px]">
+                        <Icon size={12} /> {label}
+                      </TabsTrigger>
                     ))}
-                  </div>
+                  </TabsList>
+                </Tabs>
+                {view === "fires" && (
+                  <>
+                    <CardTitle className="pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Overlays</CardTitle>
+                    <ToggleGroup
+                      type="multiple"
+                      value={[windOn ? "wind" : "", spreadOn ? "spread" : "", heatOn ? "heat" : ""].filter(Boolean)}
+                      onValueChange={(v) => {
+                        setWindOn(v.includes("wind"));
+                        setSpreadOn(v.includes("spread"));
+                        setHeatOn(v.includes("heat"));
+                      }}
+                      aria-label="Wind and fire overlays"
+                      className="grid grid-cols-3 gap-1"
+                    >
+                      {(
+                        [
+                          ["wind", "Wind", windQuery.isFetching, "Animated live wind, coloured by speed"],
+                          ["spread", "Spread", fireWindQuery.isFetching, "Where the wind pushes each fire in 1, 3 and 6 h"],
+                          ["heat", "Heatspots", false, "Heat glow of the detections"],
+                        ] as const
+                      ).map(([val, label, busy, title]) => (
+                        <ToggleGroupItem key={val} value={val} title={title} aria-label={label} className="h-7 gap-1 px-1 text-[11px]">
+                          <i
+                            aria-hidden
+                            className="size-[7px] rounded-full border"
+                            style={{
+                              background: (val === "wind" ? windOn : val === "spread" ? spreadOn : heatOn) ? "#4cc36a" : "transparent",
+                              borderColor: (val === "wind" ? windOn : val === "spread" ? spreadOn : heatOn) ? "#4cc36a" : "currentColor",
+                            }}
+                          />
+                          {label}
+                          {busy ? <small className="text-[9px] opacity-80">…</small> : null}
+                        </ToggleGroupItem>
+                      ))}
+                    </ToggleGroup>
+                  </>
+                )}
+              </CardHeader>
+              {view === "fires" && (windOn || spreadOn || (firesNearby && (spreadOn || heatOn))) && (
+                <CardContent className="space-y-1.5 p-2.5 pt-0">
                   {windOn && (
-                    <div className="ember-wind-readout" style={{ marginTop: "10px" }}>
+                    <div className="rounded-md border bg-muted/40 p-1.5">
                       {windQuery.isError ? (
-                        <span style={{ opacity: 0.75 }}>Wind unavailable. Try again in a minute.</span>
+                        <span className="text-[11px] opacity-75">Wind unavailable. Try again in a minute.</span>
                       ) : windHere ? (
-                        <b>
+                        <p className="text-[11px] font-semibold tabular-nums">
                           {Math.round(windHere.speed)} km/h from {windHere.from} → pushing {windHere.toward}
-                          {place ? ` · ${place.name}` : ""}
-                        </b>
+                          {place ? <span className="font-normal text-muted-foreground"> · {place.name}</span> : null}
+                        </p>
                       ) : (
-                        <span style={{ opacity: 0.75 }}>Loading wind…</span>
+                        <span className="text-xs opacity-75">Loading wind…</span>
                       )}
                       <div
-                        className="ember-wind-scale"
+                        className="mt-1.5 h-1.5 rounded-full"
                         title={`10 m above ground · ${windQuery.data?.run ?? "NOAA GFS"}`}
-                        style={{
-                          background: `linear-gradient(to right, ${WIND_SCALE.map(([, c]) => c).join(", ")})`,
-                        }}
+                        style={{ background: `linear-gradient(to right, ${WIND_SCALE.map(([, c]) => c).join(", ")})` }}
                       />
-                      <div className="ember-wind-ticks">
+                      <div className="mt-0.5 flex justify-between font-mono text-[9px] text-muted-foreground">
                         <span>{WIND_SCALE[0][0]}</span>
-                        <span style={{ textAlign: "right" }}>{WIND_SCALE[WIND_SCALE.length - 1][0]}+ km/h</span>
+                        <span>{WIND_SCALE[WIND_SCALE.length - 1][0]}+ km/h</span>
                       </div>
                     </div>
                   )}
                   {spreadOn && (
-                    <div style={{ marginTop: "10px", fontSize: "12px" }}>
-                      <div className="ember-spread-key">
-                        {([["+1 h", "#e3211c"], ["+3 h", "#ff8c1a"], ["+6 h", "#ffd000"]] as const).map(([t, c]) => (
-                          <span key={t} style={{ display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                            <i style={{ width: "10px", height: "10px", borderRadius: "2px", background: c, opacity: 0.8 }} /> {t}
-                          </span>
-                        ))}
-                      </div>
-                      <small style={{ display: "block", fontSize: "10px", opacity: 0.75, marginTop: "4px" }}>
+                    <div className="flex items-center gap-3 text-xs">
+                      {([["+1 h", "#e3211c"], ["+3 h", "#ff8c1a"], ["+6 h", "#ffd000"]] as const).map(([t, c]) => (
+                        <span key={t} className="inline-flex items-center gap-1">
+                          <i className="size-2.5 rounded-[3px] opacity-80" style={{ background: c }} /> {t}
+                        </span>
+                      ))}
+                      <small className="ml-auto text-[10px] text-muted-foreground">
                         {fireWindQuery.isError
                           ? "Forecast unavailable."
                           : spreadFires.length === 0
-                            ? "No fires to project here."
-                            : `Next 6 h for ${spreadFires.length} strongest fires.`}
+                            ? "No fires to project."
+                            : `6 h · ${spreadFires.length} strongest.`}
                       </small>
                     </div>
                   )}
                   {firesNearby && (spreadOn || heatOn) && (
-                    <div
-                      role="status"
-                      style={{ marginTop: "10px", padding: "7px 9px", borderRadius: "4px", fontSize: "11px", background: "rgb(255 140 26 / 14%)", border: "1px solid rgb(255 140 26 / 40%)" }}
-                    >
+                    <div role="status" className="rounded-md border border-orange-500/40 bg-orange-500/10 p-2 text-[11px]">
                       No fires inside {areaName} right now. Showing <b>{filteredFires.length}</b> detection{filteredFires.length === 1 ? "" : "s"} within {NEARBY_KM} km of its border that the wind could push in.
                     </div>
                   )}
-                </div>
+                </CardContent>
               )}
-            </section>
+            </Card>
             {climate && focusPlace ? (
               <ClimatePanel
                 view={view as "temperature" | "heatindex"}
@@ -1307,101 +1291,96 @@ export function EmberDashboard() {
               />
             ) : (
               <>
-            <div className="ember-panel-header">
-              <div>
-                <div className="ember-panel-title">
-                  {harmonized ? "Priority clusters" : "Raw detections"}{" "}
-                  <span>{visibleHotspots.length.toString().padStart(2, "0")}</span>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <div>
+                  <CardTitle className="text-sm">
+                    {harmonized ? "Priority clusters" : "Raw detections"}{" "}
+                    <Badge variant="secondary" className="ml-1 font-mono">{visibleHotspots.length.toString().padStart(2, "0")}</Badge>
+                  </CardTitle>
+                  <CardDescription className="text-[11px]">
+                    {harmonized
+                      ? "MODIS + VIIRS fused · nearest settlement first"
+                      : "Satellite pixels · nearest settlement first"}
+                  </CardDescription>
                 </div>
-                <p>
-                  {harmonized
-                    ? "MODIS + VIIRS fused · sorted by nearest settlement"
-                    : "Satellite pixels · sorted by nearest settlement"}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Incident options"
-                className="ember-panel-menu"
-              >
-                <MoreHorizontal size={18} />
-              </Button>
-            </div>
-            <div className="ember-incident-list">
-              {visibleHotspots.map((hotspot) => {
-                const active = selectedHotspot?.id === hotspot.id;
-                return (
-                  <button
-                    type="button"
-                    className={`ember-incident-row ${active ? "active" : ""}`}
-                    key={hotspot.id}
-                    onClick={() => setSelectedId(hotspot.id)}
-                  >
-                    <span
-                      className={`ember-incident-indicator indicator-${SEVERITY_OF[hotspot.confidence]}`}
-                    >
-                      <Flame size={14} />
-                    </span>
-                    <span className="ember-incident-copy">
-                      <span className="ember-incident-name">
-                        {hotspot.name}
-                        <i
-                          className={
-                            hotspot.confidence === "high" ? "confidence-high" : "confidence-nominal"
-                          }
-                        >
-                          {BADGE_OF[hotspot.confidence]}
-                        </i>
-                        <b style={{ marginLeft: "auto", fontFamily: "var(--font-mono)", fontSize: "9px", fontWeight: 600 }}>{hotspot.proximityKm.toFixed(1)} km</b>
-                      </span>
-                      {!hotspot.name.startsWith("Sector") && (
-                        <span className="ember-incident-area">{place ? hotspot.settlement : hotspot.municipality === "Regional" ? hotspot.settlement : `${hotspot.municipality}, Bukidnon`}</span>
-                      )}
-                      <span className="ember-incident-meta">
-                        {hotspot.count} {harmonized ? "detections" : "px"}
-                        <span>·</span>
-                        {hotspot.acqTime}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-              {visibleHotspots.length === 0 && (
-                <div className="ember-no-results">No clusters match this search.</div>
-              )}
-            </div>
-            <Link href="/detections" className="ember-view-incidents">
-              View all incidents <ChevronRight size={15} />
-            </Link>
+                <Button variant="ghost" size="icon" aria-label="Incident options">
+                  <MoreHorizontal size={18} />
+                </Button>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
+                  {visibleHotspots.map((hotspot) => {
+                    const active = selectedHotspot?.id === hotspot.id;
+                    return (
+                      <button
+                        type="button"
+                        key={hotspot.id}
+                        onClick={() => setSelectedId(hotspot.id)}
+                        className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition-colors ${active ? "border-foreground bg-accent" : "border-transparent hover:border-border hover:bg-muted/50"}`}
+                      >
+                        <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${hotspot.confidence === "high" ? "bg-destructive/15 text-destructive" : hotspot.confidence === "medium" ? "bg-orange-500/15 text-orange-600" : "bg-muted text-muted-foreground"}`}>
+                          <Flame size={14} />
+                        </span>
+                        <span className="grid flex-1 leading-tight">
+                          <span className="flex items-center gap-1.5 text-xs font-medium">
+                            <span className="truncate">{hotspot.name}</span>
+                            <Badge variant={hotspot.confidence === "high" ? "destructive" : "outline"} className="h-4 px-1 text-[9px]">
+                              {BADGE_OF[hotspot.confidence]}
+                            </Badge>
+                            <b className="ml-auto font-mono text-[10px] font-semibold tabular-nums">{hotspot.proximityKm.toFixed(1)} km</b>
+                          </span>
+                          {!hotspot.name.startsWith("Sector") && (
+                            <span className="truncate text-[11px] text-muted-foreground">{place ? hotspot.settlement : hotspot.municipality === "Regional" ? hotspot.settlement : `${hotspot.municipality}, Bukidnon`}</span>
+                          )}
+                          <span className="text-[10px] text-muted-foreground">
+                            {hotspot.count} {harmonized ? "detections" : "px"} · {hotspot.acqTime}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                  {visibleHotspots.length === 0 && (
+                    <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">No clusters match this search.</div>
+                  )}
+                </div>
+                <Button variant="ghost" size="sm" className="mt-1 w-full justify-between" asChild>
+                  <Link href="/detections">
+                    View all incidents <ChevronRight size={15} />
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
             {selectedHotspot && (
-              <div className="ember-selected-detail">
-                <div className="ember-detail-kicker">
-                  <Sparkles size={13} /> SELECTED FIRE
-                </div>
-                <div className="ember-detail-title">
-                  {selectedHotspot.name}
-                  <span className="ember-detail-status">
-                    {BADGE_OF[selectedHotspot.confidence]}
-                    {selectedHotspot.fusedConfidencePercent !== undefined &&
-                      ` · ${selectedHotspot.fusedConfidencePercent}%`}
-                  </span>
-                </div>
-                <p>
-                  {selectedHotspot.proximityKm.toFixed(1)} km from nearest town
-                </p>
-                <div className="ember-detail-stats">
-                  <span>
-                    <b>{selectedHotspot.count}</b> hotspots
-                  </span>
-                  <span>
+              <Card className="border-foreground/20">
+                <CardHeader className="pb-2">
+                  <CardDescription className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide">
+                    <Sparkles size={13} /> Selected fire
+                  </CardDescription>
+                  <CardTitle className="flex flex-wrap items-center gap-1.5 text-sm">
+                    {selectedHotspot.name}
+                    <Badge variant={selectedHotspot.confidence === "high" ? "destructive" : "secondary"} className="text-[10px]">
+                      {BADGE_OF[selectedHotspot.confidence]}
+                      {selectedHotspot.fusedConfidencePercent !== undefined &&
+                        ` · ${selectedHotspot.fusedConfidencePercent}%`}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="text-[11px]">
+                    {selectedHotspot.proximityKm.toFixed(1)} km from nearest town
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="flex items-center gap-2 pt-0 text-xs">
+                  <Badge variant="outline" className="tabular-nums">
+                    <b>{selectedHotspot.count}</b>&nbsp;hotspots
+                  </Badge>
+                  <span className="inline-flex items-center gap-1 text-muted-foreground">
                     <Radio size={13} />{" "}
                     {(selectedHotspot.sources ?? [selectedHotspot.source]).join(" + ")} ·{" "}
                     {selectedHotspot.brightness} K
                     {selectedHotspot.frp !== undefined && ` · ${selectedHotspot.frp} MW`}
                   </span>
-                </div>
-              </div>
+                </CardContent>
+              </Card>
             )}
               </>
             )}
@@ -1441,46 +1420,6 @@ export function EmberDashboard() {
         <SmartActionGuide place={place ?? DEFAULT_PLACE} onLocate={handleLocate} />
 
       </section>
-
-      <section className="ember-bottom-strip">
-        <div>
-          <span className="ember-bottom-icon">
-            <Flame size={16} />
-          </span>
-          <span>
-            <b>
-              {isHistoricalMode
-                ? `Historical archive · ${formatShortDate(activeScrubDate)}`
-                : live
-                  ? "Live NASA FIRMS detections"
-                  : "Bukidnon detections"}
-            </b>
-            <small>
-              {live || isHistoricalMode
-                ? firmsQuery.isError
-                  ? "Live feed failed. No detections shown; try again shortly"
-                  : `${activeCount} ${isHistoricalMode ? "archive" : "live"} detections · ${place ? (boundary ? (firesNearby ? `within ${NEARBY_KM} km of ${areaName} (none inside)` : `inside ${areaName}`) : `~55 km around ${place.name}`) : firmsQuery.data?.region === "Global" ? "Global" : "SouthEast_Asia"}`
-                : `${visibleHotspots.length} clusters · closest settlement ${closest.toFixed(1)} km`}
-            </small>
-          </span>
-        </div>
-        <div className="ember-bottom-right">
-          <button aria-label="More system status">
-            <MoreHorizontal size={17} />
-          </button>
-        </div>
-      </section>
-      <footer className="ember-footer">
-        <span>
-          EMBER <i>·</i> EARLY RESPONSE MONITORING
-        </span>
-        <span>
-          Thermal anomalies are indicators, not confirmed fires.{" "}
-          <Link href="/detections">
-            Learn about confidence scores <ChevronRight size={12} />
-          </Link>
-        </span>
-      </footer>
     </EmberShell>
   );
 }
