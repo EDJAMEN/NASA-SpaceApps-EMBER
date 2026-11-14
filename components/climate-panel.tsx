@@ -2,7 +2,7 @@
 
 import type React from "react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
-import { Droplets, MapPin, Thermometer, Wind } from "lucide-react";
+import { Droplets, Thermometer } from "lucide-react";
 import type { HeatLevel } from "@/lib/action-guide";
 import type { Conditions } from "@/lib/conditions";
 import type { GuidePlace } from "@/lib/geocode";
@@ -169,7 +169,7 @@ function RangePicker({
     cursor: "grab",
   };
   return (
-    <div style={{ marginTop: "16px" }}>
+    <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" }}>
         <span style={{ fontWeight: 700 }}>
           Show areas {range[0]}–{range[1]}°C
@@ -212,8 +212,8 @@ function RangePicker({
           : coverage === null
           ? ""
           : coverage === 0
-            ? `No part of ${coverageOf ?? "the area around this place"} has a ${what} in this range.`
-            : `Covers about ${Math.max(1, Math.round(coverage * 100))}% of ${coverageOf ?? "the ~100 km area around this place"}.`}
+            ? `Nothing here in this range.`
+            : `Covers ~${Math.max(1, Math.round(coverage * 100))}% of ${coverageOf ?? "this area"}.`}
       </p>
     </div>
   );
@@ -233,16 +233,14 @@ function AreaLevelPicker({
   missing: string | null;
 }) {
   return (
-    <div style={{ marginTop: "12px" }}>
-      <div className="ember-sort-label" style={{ padding: 0, marginBottom: "6px" }}>
-        <span>AREA LEVEL</span>
-      </div>
-      {levels === null ? (
+    <div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }} role="radiogroup" aria-label="Area level">
+        {levels === null ? (
         <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>Finding this place&rsquo;s country, province, city…</p>
       ) : levels.length === 0 ? (
         <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>No administrative areas found here.</p>
       ) : (
-        <div role="radiogroup" aria-label="Area level" style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+        <>
           {levels.map((l) => {
             const on = l.key === levelKey;
             return (
@@ -253,27 +251,27 @@ function AreaLevelPicker({
                 key={l.key}
                 onClick={() => onLevelChange(l.key)}
                 title={`${l.label}: ${l.name}`}
+                aria-label={`${l.label}: ${l.name}`}
                 style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-start",
-                  padding: "5px 9px",
-                  borderRadius: "6px",
+                  padding: "4px 10px",
+                  borderRadius: "999px",
                   border: `1px solid ${on ? "var(--foreground)" : "var(--border)"}`,
-                  background: on ? "var(--accent)" : "transparent",
-                  textAlign: "left",
+                  background: on ? "var(--foreground)" : "color-mix(in oklab, var(--muted) 40%, transparent)",
+                  color: on ? "var(--background)" : "var(--foreground)",
+                  fontSize: "11px",
+                  fontWeight: on ? 700 : 500,
                   lineHeight: 1.2,
+                  boxShadow: on ? "0 1px 6px rgb(0 0 0 / 25%)" : undefined,
+                  cursor: "pointer",
                 }}
               >
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "8px", color: "var(--muted-foreground)", textTransform: "uppercase" }}>
-                  {l.label}
-                </span>
-                <span style={{ fontSize: "11px", fontWeight: on ? 700 : 500 }}>{l.name}</span>
+                {l.name}
               </button>
             );
           })}
-        </div>
+        </>
       )}
+      </div>
       {missing && (
         <p style={{ marginTop: "6px", fontSize: "11px", color: "var(--muted-foreground)" }}>
           {missing} has no official border mapped in OpenStreetMap, so it can&rsquo;t be covered precisely. Choose a larger level, such as the city.
@@ -283,21 +281,34 @@ function AreaLevelPicker({
   );
 }
 function Big({ value, label }: { value: number | null; label: string }) {
+  const c = value === null ? null : heatColor(value);
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "10px 0 6px" }}>
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        margin: "4px 0",
+        padding: "8px 10px",
+        borderRadius: "10px",
+        border: "1px solid var(--border)",
+        background: c ? `color-mix(in oklab, ${c} 14%, var(--card))` : "var(--card)",
+      }}
+    >
       <span
         aria-hidden
         style={{
-          width: "14px",
-          height: "40px",
-          borderRadius: "var(--radius-control)",
-          background: value === null ? "var(--muted)" : heatColor(value),
-          border: "1px solid rgb(0 0 0 / 25%)",
+          width: "8px",
+          alignSelf: "stretch",
+          minHeight: "40px",
+          borderRadius: "999px",
+          background: c ?? "var(--muted)",
+          boxShadow: c ? `0 0 0 3px color-mix(in oklab, ${c} 22%, transparent)` : undefined,
         }}
       />
       <div>
-        <div style={{ fontSize: "32px", fontWeight: 700, lineHeight: 1 }}>{value === null ? "…" : `${Math.round(value)}°C`}</div>
-        <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{label}</div>
+        <div style={{ fontSize: "28px", fontWeight: 800, lineHeight: 1, letterSpacing: "-0.02em" }}>{value === null ? "…" : `${Math.round(value)}°C`}</div>
+        <div style={{ fontSize: "11px", color: "var(--muted-foreground)", marginTop: "2px" }}>{label}</div>
       </div>
     </div>
   );
@@ -343,59 +354,33 @@ export function ClimatePanel({
   const badge = HEAT_BADGE[heat];
   const maxHi = conditions?.maxHeatIndexC ?? null;
   return (
-    <div style={{ padding: "14px 16px", fontSize: "12px" }} aria-live="polite">
-      <div className="ember-detail-kicker">
-        {view === "temperature" ? <Thermometer size={13} /> : <Droplets size={13} />}{" "}
-        {view === "temperature" ? "TEMPERATURE" : "HEAT INDEX"}
-      </div>
-      <div style={{ fontWeight: 700, fontSize: "14px", marginTop: "6px", display: "flex", gap: "5px", alignItems: "center" }}>
-        <MapPin size={14} /> {place.name}
-      </div>
-      <div style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>{place.region}</div>
+    <div style={{ fontSize: "12px" }} aria-live="polite">
+      <section className="ember-panel-section" style={{ gap: "6px" }}>
+        <div className="ember-detail-kicker">
+          {view === "temperature" ? <Thermometer size={13} /> : <Droplets size={13} />}{" "}
+          {view === "temperature" ? "TEMPERATURE" : "HEAT INDEX"} · {place.name}
+        </div>
+        <div style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>{place.region}</div>
+        <AreaLevelPicker levels={levels} levelKey={levelKey} onLevelChange={onLevelChange} missing={levelMissing} />
+      </section>
 
-      <AreaLevelPicker levels={levels} levelKey={levelKey} onLevelChange={onLevelChange} missing={levelMissing} />
-
+      <section className="ember-panel-section" style={{ gap: "6px" }}>
       {error ? (
         <p style={{ marginTop: "10px" }}>Weather data is unavailable right now.</p>
       ) : view === "temperature" ? (
         <>
-          <Big value={conditions?.tempC ?? null} label="Air temperature now" />
-          <ul style={{ display: "grid", gap: "4px", marginTop: "6px" }}>
-            <li>
-              <Droplets size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> Humidity{" "}
-              <b>{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
-            </li>
-            <li>
-              <Wind size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> Wind{" "}
-              <b>{conditions?.windKmh != null ? `${Math.round(conditions.windKmh)} km/h` : "…"}</b>
-            </li>
-            <li>
-              Feels like (heat index) <b>{heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}</b>
-            </li>
-          </ul>
+          <Big value={conditions?.tempC ?? null} label={`Feels ${heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"} · Humidity ${conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"} · Wind ${conditions?.windKmh != null ? `${Math.round(conditions.windKmh)} km/h` : "…"}`} />
         </>
       ) : (
         <>
-          <Big value={maxHi} label="Max heat index today" />
-          <ul style={{ display: "grid", gap: "4px", marginTop: "6px" }}>
-            <li>
-              Right now <b>{heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}</b>
-            </li>
-            <li>
-              Level{" "}
-              <b style={{ color: badge.color === "var(--muted-foreground)" ? undefined : badge.color }}>
-                {badge.icon} {heat === "None" ? "No heat warning" : heat}
-              </b>{" "}
-              <span style={{ color: "var(--muted-foreground)" }}>(PAGASA, current)</span>
-            </li>
-            <li>
-              Temperature <b>{conditions?.tempC != null ? `${Math.round(conditions.tempC)}°C` : "…"}</b> · Humidity{" "}
-              <b>{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
-            </li>
-          </ul>
+          <Big value={maxHi} label={`Now ${heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"} · ${heat === "None" ? "No warning" : heat}`} />
+          <p style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>
+            Temp{" "}
+            <b style={{ color: "var(--foreground)" }}>{conditions?.tempC != null ? `${Math.round(conditions.tempC)}°C` : "…"}</b> · Humidity{" "}
+            <b style={{ color: "var(--foreground)" }}>{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
+          </p>
         </>
       )}
-
       <RangePicker
         what={view === "temperature" ? "temperature" : "max heat index"}
         domain={domain}
@@ -407,13 +392,10 @@ export function ClimatePanel({
         coverageOf={coverageOf}
       />
 
-      <div style={{ marginTop: "16px" }}>
-        <HeatScaleLegend title={view === "temperature" ? "Temperature" : "Max Heat Index"} />
-      </div>
-      <p style={{ marginTop: "12px", fontSize: "10px", color: "var(--muted-foreground)" }}>
-        Click anywhere on the map, or search a place, to check another spot. Colored areas cover exactly the chosen area: its official border (dashed line) from OpenStreetMap.
-        Source: Open-Meteo.
+      <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }} title="Dashed line = official OpenStreetMap border">
+        Tap map or search for another spot. Source: Open-Meteo.
       </p>
+      </section>
     </div>
   );
 }
