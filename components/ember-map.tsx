@@ -821,7 +821,7 @@ export function EmberMap({
       if (map.getSource("ember-wind-field")) map.removeSource("ember-wind-field");
     };
     drop();
-    if (!wind) return;
+    if (!wind || !windTexture) return; // the colour layer IS the "Wind" map style; other styles show only the streaks
     const MAX_LAT = 85.0511;
     const size = 512; // the data is a 1° grid: 512 px is already finer, and 4× less main-thread work than 1024
     const img = document.createElement("canvas");

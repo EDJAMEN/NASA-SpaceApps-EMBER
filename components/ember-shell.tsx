@@ -139,7 +139,6 @@ export function EmberShell({
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
-          {cover && <SidebarTrigger aria-label="Hide sidebar ( [ )" title="Hide sidebar  [" className="absolute top-3 right-3 size-7" />}
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup>
