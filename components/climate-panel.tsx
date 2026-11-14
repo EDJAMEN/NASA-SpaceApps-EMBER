@@ -2,31 +2,36 @@
 
 import type React from "react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
-import { Droplets, MapPin, Thermometer, Wind } from "lucide-react";
+import { Droplets, Thermometer } from "lucide-react";
 import type { HeatLevel } from "@/lib/action-guide";
 import type { Conditions } from "@/lib/conditions";
 import type { GuidePlace } from "@/lib/geocode";
 import type { AdminLevel } from "@/app/api/boundary/route";
 import { HEAT_SCALE, HEAT_TICKS, heatColor } from "@/lib/heat-grid";
 import { HEAT_BADGE } from "@/components/smart-action-guide";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /** Color scale bar matching the "Max Heat Index" reference legend. */
-export function HeatScaleLegend({ title, dark = false }: { title: string; dark?: boolean }) {
+export function HeatScaleLegend({ title }: { title: string }) {
   const swatches = HEAT_SCALE.map(([, color]) => color);
   return (
-    <div role="img" aria-label={`${title}: color scale from 0 to above 50 °C`} style={{ fontSize: "9px", color: dark ? "oklch(0.97 0.01 90)" : undefined }}>
-      <div style={{ fontWeight: 700, textAlign: "center", marginBottom: "4px" }}>{title}</div>
-      <div style={{ display: "flex", height: "10px", borderRadius: "var(--radius-pill)", overflow: "hidden", border: "1px solid rgb(0 0 0 / 35%)" }}>
+    <div role="img" aria-label={`${title}: color scale from 0 to above 50 °C`}>
+      <div className="mb-1 text-center text-xs font-semibold">{title}</div>
+      <div className="flex h-2.5 overflow-hidden rounded-full border border-black/35">
         {swatches.map((c) => (
-          <span key={c} style={{ flex: 1, background: c }} />
+          <span key={c} className="flex-1" style={{ background: c }} />
         ))}
       </div>
-      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", marginTop: "3px" }}>
+      <div className="mt-1 flex justify-between font-mono text-[9px] text-muted-foreground">
         {HEAT_TICKS.map((t) => (
           <span key={t}>{t}</span>
         ))}
       </div>
-      <div style={{ textAlign: "center", marginTop: "2px", opacity: 0.8 }}>°C</div>
+      <div className="text-center text-[9px] text-muted-foreground">°C</div>
     </div>
   );
 }
@@ -55,22 +60,12 @@ export function HeatScaleSlider({
     const next = HEAT_SCALE[i + 1]?.[0] ?? SCALE_MAX;
     return `${color} ${from}, ${color} ${pct(next)}`;
   }).join(", ");
-  const thumb: React.CSSProperties = {
-    display: "block",
-    width: "18px",
-    height: "18px",
-    borderRadius: "var(--radius-pill)",
-    background: "#fff",
-    border: "2px solid #111",
-    boxShadow: "0 1px 5px rgb(0 0 0 / 45%)",
-    cursor: "grab",
-  };
   const clamp = (v: number) => (domain ? Math.max(domain[0], Math.min(domain[1], v)) : v);
   return (
-    <div style={{ fontSize: "9px", color: "oklch(0.97 0.01 90)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, marginBottom: "6px" }}>
+    <div className="text-[9px]">
+      <div className="mb-1.5 flex justify-between font-semibold">
         <span>{title}</span>
-        <span style={{ fontFamily: "var(--font-mono)" }}>{range ? `${range[0]}–${range[1]}°C` : "loading…"}</span>
+        <span className="font-mono">{range ? `${range[0]}–${range[1]}°C` : "loading…"}</span>
       </div>
       <SliderPrimitive.Root
         min={0}
@@ -82,24 +77,32 @@ export function HeatScaleSlider({
         // Handles stay within the temperatures that actually occur around this place.
         onValueChange={(v) => onRangeChange([clamp(v[0]!), clamp(v[1]!)])}
         aria-label={`${title} range`}
-        style={{ position: "relative", display: "flex", alignItems: "center", width: "100%", height: "24px", touchAction: "none", userSelect: "none" }}
+        className="relative flex h-6 w-full touch-none select-none items-center"
       >
         <SliderPrimitive.Track
-          style={{ position: "relative", flexGrow: 1, height: "12px", borderRadius: "var(--radius-pill)", background: `linear-gradient(to right, ${bands})`, border: "1px solid rgb(0 0 0 / 45%)" }}
+          className="relative h-3 grow rounded-full border border-black/45"
+          style={{ background: `linear-gradient(to right, ${bands})` }}
         >
           {domain && (
             // Faint marker of the temperatures present around this place.
             <span
               aria-hidden
-              style={{ position: "absolute", top: "-4px", bottom: "-4px", left: pct(domain[0]), right: `calc(100% - ${pct(domain[1])})`, border: "1px dashed rgb(255 255 255 / 55%)", borderRadius: "var(--radius-control)" }}
+              className="absolute rounded border border-dashed border-white/55"
+              style={{ top: -4, bottom: -4, left: pct(domain[0]), right: `calc(100% - ${pct(domain[1])})` }}
             />
           )}
-          <SliderPrimitive.Range style={{ position: "absolute", height: "100%", borderRadius: "var(--radius-pill)", boxShadow: "0 0 0 2px #fff" }} />
+          <SliderPrimitive.Range className="absolute h-full rounded-full ring-2 ring-white" />
         </SliderPrimitive.Track>
-        <SliderPrimitive.Thumb aria-label={`Lowest ${title.toLowerCase()}`} style={thumb} />
-        <SliderPrimitive.Thumb aria-label={`Highest ${title.toLowerCase()}`} style={thumb} />
+        <SliderPrimitive.Thumb
+          aria-label={`Lowest ${title.toLowerCase()}`}
+          className="block h-[18px] w-[18px] cursor-grab rounded-full border-2 border-black bg-white shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <SliderPrimitive.Thumb
+          aria-label={`Highest ${title.toLowerCase()}`}
+          className="block h-[18px] w-[18px] cursor-grab rounded-full border-2 border-black bg-white shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
       </SliderPrimitive.Root>
-      <div style={{ position: "relative", height: "12px", fontFamily: "var(--font-mono)", marginTop: "2px" }}>
+      <div className="relative mt-0.5 h-3 font-mono">
         {HEAT_TICKS.map((t) => (
           <button
             type="button"
@@ -110,13 +113,14 @@ export function HeatScaleSlider({
               const v = clamp(t);
               onRangeChange(Math.abs(v - range[0]) <= Math.abs(v - range[1]) ? [Math.min(v, range[1]), range[1]] : [range[0], Math.max(v, range[0])]);
             }}
-            style={{ position: "absolute", left: pct(t), transform: "translateX(-50%)", color: "inherit", fontSize: "9px", cursor: "pointer" }}
+            className="absolute -translate-x-1/2 cursor-pointer text-[9px]"
+            style={{ left: pct(t) }}
           >
             {t}
           </button>
         ))}
       </div>
-      <div style={{ textAlign: "center", marginTop: "2px", opacity: 0.8 }}>°C · dashed box = temperatures around this place</div>
+      <div className="text-center text-muted-foreground">°C · dashed box = temperatures around this place</div>
     </div>
   );
 }
@@ -158,27 +162,17 @@ function RangePicker({
     return `${heatColor(v)} ${k * 10}%`;
   }).join(", ");
   const full = range[0] === min && range[1] === max;
-  const thumb: React.CSSProperties = {
-    display: "block",
-    width: "20px",
-    height: "20px",
-    borderRadius: "var(--radius-pill)",
-    background: "var(--background)",
-    border: "2px solid var(--foreground)",
-    boxShadow: "0 1px 4px rgb(0 0 0 / 30%)",
-    cursor: "grab",
-  };
   return (
-    <div style={{ marginTop: "16px" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: "8px" }}>
-        <span style={{ fontWeight: 700 }}>
-          Show areas {range[0]}–{range[1]}°C
+    <div>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-xs font-semibold tabular-nums">
+          {range[0]}–{range[1]}°C
         </span>
         {!full && (
           <button
             type="button"
             onClick={() => onRangeChange([min, max])}
-            style={{ fontSize: "11px", textDecoration: "underline", color: "var(--muted-foreground)" }}
+            className="text-[11px] text-muted-foreground underline"
           >
             Show all
           </button>
@@ -192,35 +186,46 @@ function RangePicker({
         value={range}
         onValueChange={(v) => onRangeChange([v[0]!, v[1]!])}
         aria-label={`Select ${what} range`}
-        style={{ position: "relative", display: "flex", alignItems: "center", width: "100%", height: "28px", marginTop: "8px", touchAction: "none", userSelect: "none" }}
+        className="relative mt-1 flex h-5 w-full touch-none select-none items-center"
       >
         <SliderPrimitive.Track
-          style={{ position: "relative", flexGrow: 1, height: "10px", borderRadius: "var(--radius-pill)", background: `linear-gradient(to right, ${stops})`, border: "1px solid rgb(0 0 0 / 25%)" }}
+          className="relative h-2 grow rounded-full border border-black/25 shadow-sm"
+          style={{ background: `linear-gradient(to right, ${stops})` }}
         >
-          <SliderPrimitive.Range style={{ position: "absolute", height: "100%", borderRadius: "var(--radius-pill)", boxShadow: "0 0 0 2px var(--foreground)" }} />
+          <SliderPrimitive.Range className="absolute h-full rounded-full ring-1 ring-foreground" />
         </SliderPrimitive.Track>
-        <SliderPrimitive.Thumb aria-label={`Lowest ${what}`} style={thumb} />
-        <SliderPrimitive.Thumb aria-label={`Highest ${what}`} style={thumb} />
+        <SliderPrimitive.Thumb
+          aria-label={`Lowest ${what}`}
+          className="block size-4 cursor-grab rounded-full border-2 border-foreground bg-background shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
+        <SliderPrimitive.Thumb
+          aria-label={`Highest ${what}`}
+          className="block size-4 cursor-grab rounded-full border-2 border-foreground bg-background shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        />
       </SliderPrimitive.Root>
-      <div style={{ display: "flex", justifyContent: "space-between", fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--muted-foreground)" }}>
+      <div className="flex justify-between font-mono text-[9px] text-muted-foreground">
         <span>{min}°C</span>
         <span>{max}°C</span>
       </div>
-      <p style={{ marginTop: "6px", fontSize: "11px", color: status ? "var(--muted-foreground)" : undefined }}>
-        {status
-          ? status
-          : coverage === null
-          ? ""
-          : coverage === 0
-            ? `No part of ${coverageOf ?? "the area around this place"} has a ${what} in this range.`
-            : `Covers about ${Math.max(1, Math.round(coverage * 100))}% of ${coverageOf ?? "the ~100 km area around this place"}.`}
-      </p>
+      {loading && !domain ? (
+        <Skeleton className="mt-2 h-4 w-2/3" />
+      ) : (
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {status
+            ? status
+            : coverage === null
+              ? ""
+              : coverage === 0
+                ? `Nothing here in this range.`
+                : `Covers ~${Math.max(1, Math.round(coverage * 100))}% of ${coverageOf ?? "this area"}.`}
+        </p>
+      )}
     </div>
   );
 }
 
 
-/** Area level chips: only the levels that really exist for this place, each with its real name. */
+/** Area levels: stacked rows like the wildfire list — level left, real name right. */
 function AreaLevelPicker({
   levels,
   levelKey,
@@ -232,50 +237,39 @@ function AreaLevelPicker({
   onLevelChange: (key: string) => void;
   missing: string | null;
 }) {
+  if (levels === null) {
+    return <Skeleton className="h-9 w-full" />;
+  }
+  if (levels.length === 0) {
+    return <p className="text-xs text-muted-foreground">No administrative areas found here.</p>;
+  }
   return (
-    <div style={{ marginTop: "12px" }}>
-      <div className="ember-sort-label" style={{ padding: 0, marginBottom: "6px" }}>
-        <span>AREA LEVEL</span>
-      </div>
-      {levels === null ? (
-        <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>Finding this place&rsquo;s country, province, city…</p>
-      ) : levels.length === 0 ? (
-        <p style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>No administrative areas found here.</p>
-      ) : (
-        <div role="radiogroup" aria-label="Area level" style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
-          {levels.map((l) => {
-            const on = l.key === levelKey;
-            return (
-              <button
-                type="button"
-                role="radio"
-                aria-checked={on}
-                key={l.key}
-                onClick={() => onLevelChange(l.key)}
+    <div>
+      <RadioGroup
+        value={levelKey ?? ""}
+        onValueChange={onLevelChange}
+        aria-label="Area level"
+        className="divide-y divide-border overflow-hidden rounded-lg border"
+      >
+        {levels.map((l) => {
+          const on = l.key === levelKey;
+          return (
+            <div key={l.key} className={`flex items-center transition-colors ${on ? "bg-accent" : ""}`}>
+              <RadioGroupItem value={l.key} id={`area-${l.key}`} className="sr-only" />
+              <Label
+                htmlFor={`area-${l.key}`}
                 title={`${l.label}: ${l.name}`}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "flex-start",
-                  padding: "5px 9px",
-                  borderRadius: "6px",
-                  border: `1px solid ${on ? "var(--foreground)" : "var(--border)"}`,
-                  background: on ? "var(--accent)" : "transparent",
-                  textAlign: "left",
-                  lineHeight: 1.2,
-                }}
+                className="flex w-full cursor-pointer items-center justify-between gap-2 px-2 py-1 leading-tight"
               >
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "8px", color: "var(--muted-foreground)", textTransform: "uppercase" }}>
-                  {l.label}
-                </span>
-                <span style={{ fontSize: "11px", fontWeight: on ? 700 : 500 }}>{l.name}</span>
-              </button>
-            );
-          })}
-        </div>
-      )}
+                <span className="font-mono text-[9px] uppercase text-muted-foreground">{l.label}</span>
+                <span className={`truncate text-xs ${on ? "font-bold" : "font-medium"}`}>{l.name}</span>
+              </Label>
+            </div>
+          );
+        })}
+      </RadioGroup>
       {missing && (
-        <p style={{ marginTop: "6px", fontSize: "11px", color: "var(--muted-foreground)" }}>
+        <p className="mt-1.5 text-xs text-muted-foreground">
           {missing} has no official border mapped in OpenStreetMap, so it can&rsquo;t be covered precisely. Choose a larger level, such as the city.
         </p>
       )}
@@ -284,20 +278,17 @@ function AreaLevelPicker({
 }
 function Big({ value, label }: { value: number | null; label: string }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: "10px", margin: "10px 0 6px" }}>
+    <div className="flex items-center gap-2">
       <span
         aria-hidden
-        style={{
-          width: "14px",
-          height: "40px",
-          borderRadius: "var(--radius-control)",
-          background: value === null ? "var(--muted)" : heatColor(value),
-          border: "1px solid rgb(0 0 0 / 25%)",
-        }}
+        className="h-8 w-2.5 rounded-full shadow-[0_0_8px_rgb(0_0_0/25%)]"
+        style={{ background: value === null ? "var(--muted)" : heatColor(value) }}
       />
-      <div>
-        <div style={{ fontSize: "32px", fontWeight: 700, lineHeight: 1 }}>{value === null ? "…" : `${Math.round(value)}°C`}</div>
-        <div style={{ fontSize: "11px", color: "var(--muted-foreground)" }}>{label}</div>
+      <div className="leading-none">
+        <div className="bg-gradient-to-br from-foreground to-foreground/60 bg-clip-text text-2xl font-bold tabular-nums text-transparent">
+          {value === null ? "…" : `${Math.round(value)}°C`}
+        </div>
+        <div className="mt-0.5 text-[11px] text-muted-foreground">{label}</div>
       </div>
     </div>
   );
@@ -342,78 +333,76 @@ export function ClimatePanel({
 }) {
   const badge = HEAT_BADGE[heat];
   const maxHi = conditions?.maxHeatIndexC ?? null;
+  const Icon = view === "temperature" ? Thermometer : Droplets;
+  const headline =
+    view === "temperature"
+      ? conditions?.tempC != null
+        ? `${Math.round(conditions.tempC)}°C now`
+        : "Temperature"
+      : heat === "None"
+        ? "No heat warning"
+        : heat;
   return (
-    <div style={{ padding: "14px 16px", fontSize: "12px" }} aria-live="polite">
-      <div className="ember-detail-kicker">
-        {view === "temperature" ? <Thermometer size={13} /> : <Droplets size={13} />}{" "}
-        {view === "temperature" ? "TEMPERATURE" : "HEAT INDEX"}
-      </div>
-      <div style={{ fontWeight: 700, fontSize: "14px", marginTop: "6px", display: "flex", gap: "5px", alignItems: "center" }}>
-        <MapPin size={14} /> {place.name}
-      </div>
-      <div style={{ color: "var(--muted-foreground)", fontSize: "11px" }}>{place.region}</div>
-
-      <AreaLevelPicker levels={levels} levelKey={levelKey} onLevelChange={onLevelChange} missing={levelMissing} />
-
-      {error ? (
-        <p style={{ marginTop: "10px" }}>Weather data is unavailable right now.</p>
-      ) : view === "temperature" ? (
-        <>
-          <Big value={conditions?.tempC ?? null} label="Air temperature now" />
-          <ul style={{ display: "grid", gap: "4px", marginTop: "6px" }}>
-            <li>
-              <Droplets size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> Humidity{" "}
-              <b>{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
-            </li>
-            <li>
-              <Wind size={12} style={{ display: "inline", verticalAlign: "-2px" }} /> Wind{" "}
-              <b>{conditions?.windKmh != null ? `${Math.round(conditions.windKmh)} km/h` : "…"}</b>
-            </li>
-            <li>
-              Feels like (heat index) <b>{heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}</b>
-            </li>
-          </ul>
-        </>
-      ) : (
-        <>
-          <Big value={maxHi} label="Max heat index today" />
-          <ul style={{ display: "grid", gap: "4px", marginTop: "6px" }}>
-            <li>
-              Right now <b>{heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}</b>
-            </li>
-            <li>
-              Level{" "}
-              <b style={{ color: badge.color === "var(--muted-foreground)" ? undefined : badge.color }}>
+    <Card aria-live="polite" className="overflow-hidden border-0 bg-transparent shadow-none">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
+        <div>
+          <CardTitle className="flex items-center gap-1.5 text-sm">
+            <span className="flex size-5 items-center justify-center rounded-md bg-sky-500/15 text-sky-600 dark:text-sky-400">
+              <Icon size={12} />
+            </span>
+            {view === "temperature" ? "Temperature" : "Heat index"}{" "}
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              {headline}
+            </Badge>
+          </CardTitle>
+          <CardDescription className="mt-0.5 text-[11px]">
+            {place.name} · {place.region}
+          </CardDescription>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-2 p-3 pt-0">
+        <AreaLevelPicker levels={levels} levelKey={levelKey} onLevelChange={onLevelChange} missing={levelMissing} />
+        {error ? (
+          <p className="text-sm">Weather data is unavailable right now.</p>
+        ) : view === "temperature" ? (
+          <>
+            <Big value={conditions?.tempC ?? null} label={`Now · feels ${heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}`} />
+            <p className="text-[11px] text-muted-foreground">
+              Humidity <b className="text-foreground">{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
+              {" · "}Wind <b className="text-foreground">{conditions?.windKmh != null ? `${Math.round(conditions.windKmh)} km/h` : "…"}</b>
+            </p>
+          </>
+        ) : (
+          <>
+            <Big value={maxHi} label={`Max today · now ${heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}`} />
+            <p className="flex flex-wrap items-center gap-x-1 text-[11px] text-muted-foreground">
+              <span>Level</span>
+              <Badge variant="secondary" className="h-5 text-[10px]">
                 {badge.icon} {heat === "None" ? "No heat warning" : heat}
-              </b>{" "}
-              <span style={{ color: "var(--muted-foreground)" }}>(PAGASA, current)</span>
-            </li>
-            <li>
-              Temperature <b>{conditions?.tempC != null ? `${Math.round(conditions.tempC)}°C` : "…"}</b> · Humidity{" "}
-              <b>{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
-            </li>
-          </ul>
-        </>
-      )}
+              </Badge>
+              <span>(PAGASA) ·</span>
+              <b className="text-foreground">{conditions?.tempC != null ? `${Math.round(conditions.tempC)}°C` : "…"}</b>
+              <span>·</span>
+              <b className="text-foreground">{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
+            </p>
+          </>
+        )}
 
-      <RangePicker
-        what={view === "temperature" ? "temperature" : "max heat index"}
-        domain={domain}
-        range={range}
-        onRangeChange={onRangeChange}
-        coverage={coverage}
-        loading={areasLoading}
-        failed={areasFailed}
-        coverageOf={coverageOf}
-      />
+        <RangePicker
+          what={view === "temperature" ? "temperature" : "max heat index"}
+          domain={domain}
+          range={range}
+          onRangeChange={onRangeChange}
+          coverage={coverage}
+          loading={areasLoading}
+          failed={areasFailed}
+          coverageOf={coverageOf}
+        />
 
-      <div style={{ marginTop: "16px" }}>
-        <HeatScaleLegend title={view === "temperature" ? "Temperature" : "Max Heat Index"} />
-      </div>
-      <p style={{ marginTop: "12px", fontSize: "10px", color: "var(--muted-foreground)" }}>
-        Click anywhere on the map, or search a place, to check another spot. Colored areas cover exactly the chosen area: its official border (dashed line) from OpenStreetMap.
-        Source: Open-Meteo.
-      </p>
-    </div>
+        <p className="border-t border-border pt-2 text-[10px] leading-snug text-muted-foreground" title="Dashed line = official OpenStreetMap border">
+          Tap map or search to check another spot. Source: Open-Meteo.
+        </p>
+      </CardContent>
+    </Card>
   );
 }

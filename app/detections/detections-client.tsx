@@ -7,9 +7,9 @@ import { Button } from "@/components/ui/button";
 import { EmberShell } from "@/components/ember-shell";
 import { HOTSPOTS, type Confidence, type SensorSource } from "@/lib/hotspots";
 
-function toCsv() {
+function toCsv(rows: typeof HOTSPOTS) {
   const header = "id,source,confidence,brightness,acquired,lat,lng,settlement,distance_km";
-  const rows = HOTSPOTS.map((h) =>
+  const rowsOut = rows.map((h) =>
     [
       h.id,
       h.source,
@@ -22,7 +22,7 @@ function toCsv() {
       h.proximityKm,
     ].join(","),
   );
-  return [header, ...rows].join("\n");
+  return [header, ...rowsOut].join("\n");
 }
 
 export function DetectionsPage() {
@@ -47,9 +47,18 @@ export function DetectionsPage() {
       }),
     [search, source, confidence],
   );
+  const maxTemp = useMemo(
+    () => filtered.reduce((m, h) => Math.max(m, h.brightness), 0),
+    [filtered],
+  );
+  const clearFilters = () => {
+    setSearch("");
+    setSource("all");
+    setConfidence("all");
+  };
 
   const exportCsv = () => {
-    const url = URL.createObjectURL(new Blob([toCsv()], { type: "text/csv" }));
+    const url = URL.createObjectURL(new Blob([toCsv(filtered)], { type: "text/csv" }));
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = "ember-bukidnon-detections.csv";
@@ -116,7 +125,8 @@ export function DetectionsPage() {
             <span>MAX TEMPERATURE</span>
           </div>
           <div className="ember-stat-number">
-            352.0<span className="ember-stat-unit"> K</span>
+            {maxTemp > 0 ? maxTemp.toFixed(1) : "—"}
+            <span className="ember-stat-unit"> K</span>
           </div>
           <div className="ember-stat-foot">
             <span>Kelvin brightness</span>
@@ -194,6 +204,11 @@ export function DetectionsPage() {
                   <tr key={item.id} style={{ borderBottom: "1px solid var(--border)" }}>
                     <td style={{ padding: "10px 12px", fontWeight: 700 }}>#{item.id}</td>
                     <td style={{ padding: "10px 12px" }}>
+                      <span style={{ fontFamily: "var(--font-mono)", fontSize: "9px", fontWeight: 700 }}>
+                        {item.source}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px 12px", textTransform: "capitalize" }}>
                       <span
                         className={
                           item.confidence === "high" ? "confidence-high" : "confidence-nominal"
@@ -206,11 +221,8 @@ export function DetectionsPage() {
                           fontWeight: 700,
                         }}
                       >
-                        {item.source}
-                      </span>
-                    </td>
-                    <td style={{ padding: "10px 12px", textTransform: "capitalize" }}>
-                      {item.confidence}{" "}
+                        {item.confidence}
+                      </span>{" "}
                       <span style={{ color: "var(--muted-foreground)" }}>
                         ({item.rawConfidence})
                       </span>
@@ -220,7 +232,8 @@ export function DetectionsPage() {
                       {item.acqDate} {item.acqTime}
                     </td>
                     <td style={{ padding: "10px 12px", fontFamily: "var(--font-mono)" }}>
-                      POINT({item.lng} {item.lat})
+                      {Math.abs(item.lat).toFixed(2)}°{item.lat >= 0 ? "N" : "S"},{" "}
+                      {Math.abs(item.lng).toFixed(2)}°{item.lng >= 0 ? "E" : "W"}
                     </td>
                     <td style={{ padding: "10px 12px" }}>
                       {item.settlement} · <b>{item.proximityKm.toFixed(1)} km</b>
@@ -230,7 +243,23 @@ export function DetectionsPage() {
               </tbody>
             </table>
             {filtered.length === 0 && (
-              <div className="ember-no-results">No detections match the selected filters.</div>
+              <div className="ember-no-results">
+                No detections match the selected filters.{" "}
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  style={{
+                    border: 0,
+                    background: "transparent",
+                    padding: 0,
+                    color: "var(--primary)",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                  }}
+                >
+                  Clear filters
+                </button>
+              </div>
             )}
           </div>
         </div>
