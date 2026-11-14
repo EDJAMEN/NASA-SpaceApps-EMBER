@@ -4,7 +4,7 @@ Breakpoints (all in `app/globals.css`): `390px` (small phones) · `680px` (phone
 
 ## Top nav (`components/ember-shell.tsx`, shadcn header)
 
-Sticky `h-14` header: `SidebarTrigger` (opens the sidebar sheet on mobile) · `Breadcrumb` (Workspace / page) · live `Badge` pill · icon buttons with tooltips. No custom topbar CSS remains — the old `.ember-topbar*` rules were deleted as dead.
+Sticky compact header: `SidebarTrigger` (opens sidebar sheet on mobile) · `Breadcrumb` (Workspace / page) · live `Badge` pill · location · place search. On phones, map controls move into one `DropdownMenu` after search; desktop keeps controls inline. No custom topbar CSS remains — the old `.ember-topbar*` rules were deleted as dead.
 
 ## Sidebar (shadcn `Sidebar`, `collapsible="icon"`)
 

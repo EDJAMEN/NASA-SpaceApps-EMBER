@@ -194,8 +194,8 @@ export function EmberShell({
       <SidebarInset className={cover ? "overflow-x-clip bg-transparent" : undefined}>
         {cover ? (
           // One floating glass bar: navigation context on the left, map controls on the right.
-          <header className="pointer-events-none sticky top-0 z-30 px-3 pt-3">
-            <div className="pointer-events-auto flex h-14 items-center gap-2 rounded-2xl border bg-card/85 px-2.5 shadow-lg backdrop-blur-md">
+          <header className="pointer-events-none sticky top-0 z-30 px-2 pt-2 sm:px-3 sm:pt-3">
+            <div className="pointer-events-auto flex h-12 items-center gap-1 rounded-xl border bg-card/85 px-1.5 shadow-lg backdrop-blur-md sm:gap-1.5 sm:px-2">
               <SidebarTrigger aria-label="Toggle sidebar ( [ )" className="shrink-0 rounded-lg border" />
               <Breadcrumb className="hidden shrink-0 md:block">
                 <BreadcrumbList>
@@ -217,7 +217,7 @@ export function EmberShell({
               </span>
               {headerLeft}
               <div className="ml-auto shrink-0">{headerSearch}</div>
-              <div className="ember-topbar-scroll flex min-w-0 items-center gap-1.5 overflow-x-auto">{headerRight}</div>
+              <div className="ember-topbar-scroll flex min-w-0 items-center gap-1 overflow-x-auto">{headerRight}</div>
               <Button
                 variant="ghost"
                 size="icon"

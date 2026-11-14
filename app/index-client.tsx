@@ -33,6 +33,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 const EmberMap = dynamic(() => import("@/components/ember-map").then((m) => m.EmberMap), {
   ssr: false,
 });
@@ -786,7 +797,7 @@ export function EmberDashboard() {
         <Button
           variant="outline"
           size="sm"
-          className="h-8 max-w-[160px] shrink-0 gap-1.5 border-primary/30 bg-primary/10 px-2.5 text-primary hover:bg-primary/15"
+          className="h-7 max-w-[96px] shrink-0 gap-1 border-primary/30 bg-primary/10 px-2 text-primary hover:bg-primary/15 sm:max-w-[120px]"
           aria-label={`Location: ${focusPlace?.name ?? "Bukidnon region"}. Search a place`}
           title={regionLabel}
           onClick={() => document.getElementById(MAP_SEARCH_ID)?.focus()}
@@ -798,7 +809,7 @@ export function EmberDashboard() {
       headerSearch={
         <PlaceCombobox
           inputId={MAP_SEARCH_ID}
-          className="relative flex h-8 w-56 shrink-0 items-center gap-2 rounded-md border bg-background/70 px-2 text-muted-foreground [&>input]:h-full [&>input]:min-w-0 [&>input]:flex-1 [&>input]:bg-transparent [&>input]:text-xs [&>input]:text-foreground [&>input]:outline-none"
+          className="relative flex h-7 w-28 shrink-0 items-center gap-1.5 rounded-md border bg-background/70 px-1.5 text-muted-foreground sm:w-40 lg:w-44 [&>input]:h-full [&>input]:min-w-0 [&>input]:flex-1 [&>input]:bg-transparent [&>input]:text-xs [&>input]:text-foreground [&>input]:outline-none"
           label="Search any place or filter incidents"
           placeholder="Search any place or incident"
           value={search}
@@ -821,14 +832,15 @@ export function EmberDashboard() {
       }
       headerRight={
         <>
-          <ToggleGroup type="single" value={mapView} onValueChange={(v) => (v === "globe" || v === "mercator") && setMapView(v)} aria-label="Map view" className="shrink-0 rounded-lg border p-0.5">
+          <div className="hidden shrink-0 items-center gap-1 md:flex">
+          <ToggleGroup type="single" value={mapView} onValueChange={(v) => (v === "globe" || v === "mercator") && setMapView(v)} aria-label="Map view" className="shrink-0 gap-0 rounded-md border p-0.5">
             {(
               [
                 ["globe", "Globe", Globe, "3D globe view"],
                 ["mercator", "Flat", MapIcon, "Flat map view"],
               ] as const
             ).map(([key, label, Icon, title]) => (
-              <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase gap-1">
+              <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-6 gap-1 px-1.5 font-mono text-[9px] font-semibold uppercase tracking-wide sm:px-2">
                 <Icon size={12} /> {label}
               </ToggleGroupItem>
             ))}
@@ -843,7 +855,7 @@ export function EmberDashboard() {
               if (v === "wind") setWindOn(true); // the texture IS the wind: make sure it's loaded
             }}
             aria-label="Map style"
-            className="shrink-0 rounded-lg border p-0.5"
+            className="shrink-0 gap-0 rounded-md border p-0.5"
           >
             {(
               [
@@ -852,7 +864,7 @@ export function EmberDashboard() {
                 ["wind", "Wind", Wind, "Wind: full-colour live wind speed with white streamlines"],
               ] as const
             ).map(([key, label, Icon, title]) => (
-              <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase gap-1">
+              <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-6 gap-1 px-1.5 font-mono text-[9px] font-semibold uppercase tracking-wide sm:px-2">
                 <Icon size={12} /> {label}
               </ToggleGroupItem>
             ))}
@@ -866,19 +878,84 @@ export function EmberDashboard() {
                 setShowModis(v.includes("modis"));
               }}
               aria-label="Sensor layers"
-              className="shrink-0 rounded-lg border p-0.5"
+              className="shrink-0 gap-0 rounded-md border p-0.5"
             >
-              <ToggleGroupItem value="viirs" disabled={isModisEraOnly} title={isModisEraOnly ? "VIIRS launched in 2012" : "VIIRS 375 m"} aria-label="VIIRS" className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase">
+              <ToggleGroupItem value="viirs" disabled={isModisEraOnly} title={isModisEraOnly ? "VIIRS launched in 2012" : "VIIRS 375 m"} aria-label="VIIRS" className="h-6 px-1.5 font-mono text-[9px] font-semibold uppercase tracking-wide sm:px-2">
                 VIIRS
               </ToggleGroupItem>
-              <ToggleGroupItem value="modis" title="MODIS 1 km" aria-label="MODIS" className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase">
+              <ToggleGroupItem value="modis" title="MODIS 1 km" aria-label="MODIS" className="h-6 px-1.5 font-mono text-[9px] font-semibold uppercase tracking-wide sm:px-2">
                 MODIS
               </ToggleGroupItem>
             </ToggleGroup>
           )}
-          <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 font-mono text-[10px] uppercase" onClick={() => setFiltersOpen(!filtersOpen)}>
+          <Button variant="outline" size="sm" aria-label="Map layers" className="h-7 shrink-0 gap-1 px-2 font-mono text-[9px] uppercase" onClick={() => setFiltersOpen(!filtersOpen)}>
             <SlidersHorizontal size={13} /> Layers
           </Button>
+          </div>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-7 w-7 shrink-0 md:hidden"
+                aria-label="Map controls"
+                title="Map controls"
+              >
+                <SlidersHorizontal size={14} />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+              <DropdownMenuLabel>Map view</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={mapView}
+                onValueChange={(value) => {
+                  if (value === "globe" || value === "mercator") setMapView(value);
+                }}
+              >
+                <DropdownMenuRadioItem value="globe">Globe</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="mercator">Flat</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>Map style</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={windTexture ? "wind" : layers.blueMarble ? "realistic" : "normal"}
+                onValueChange={(value) => {
+                  setWindTexture(value === "wind");
+                  setLayers((prev) => ({ ...prev, blueMarble: value === "realistic" }));
+                  if (value === "wind") setWindOn(true);
+                }}
+              >
+                <DropdownMenuRadioItem value="normal">Normal</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="realistic">Realistic</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="wind">Wind</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              {view === "fires" && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>Sensor layers</DropdownMenuLabel>
+                  <DropdownMenuCheckboxItem
+                    checked={effectiveShowViirs}
+                    disabled={isModisEraOnly}
+                    onCheckedChange={(checked) => {
+                      if (!isModisEraOnly) setShowViirs(checked === true);
+                    }}
+                  >
+                    VIIRS
+                  </DropdownMenuCheckboxItem>
+                  <DropdownMenuCheckboxItem
+                    checked={showModis}
+                    onCheckedChange={(checked) => setShowModis(checked === true)}
+                  >
+                    MODIS
+                  </DropdownMenuCheckboxItem>
+                </>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setFiltersOpen(true)}>
+                <Layers size={14} /> Map layers…
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </>
       }
     >
