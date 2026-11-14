@@ -929,51 +929,6 @@ export function EmberDashboard() {
                 }
               />
 
-              {fireDanger && (
-                <button
-                  type="button"
-                  className="ember-fire-badge"
-                  onClick={() => document.getElementById("smart-action-guide")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                  aria-label={`${inSpread ? "This point is in the projected fire-spread area" : `Fire within 25 km, nearest ${nearestFireKm!.toFixed(1)} km away`}. Open action guide`}
-                >
-                  <Flame size={13} />
-                  <span>{inSpread ? "In fire-spread area" : `Fire ${nearestFireKm!.toFixed(1)} km away`}</span>
-                  <ChevronRight size={13} />
-                </button>
-              )}
-              <div className="ember-map-tools">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Zoom in"
-                  onClick={() => mapRef.current?.zoomIn()}
-                >
-                  <Plus size={17} />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Zoom out"
-                  onClick={() => mapRef.current?.zoomOut()}
-                >
-                  <Minus size={17} />
-                </Button>
-                <span />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="Center map"
-                  onClick={() =>
-                    mapRef.current?.panTo([
-                      // MapLibre takes [lng, lat]
-                      selectedHotspot?.lng ?? 125.05,
-                      selectedHotspot?.lat ?? 7.95,
-                    ])
-                  }
-                >
-                  <LocateFixed size={16} />
-                </Button>
-              </div>
               <Button
                 variant="ghost"
                 size="icon"
@@ -1056,6 +1011,41 @@ export function EmberDashboard() {
                   </div>
                 </div>
               )}
+              <div className="ember-map-compass">
+                N<span>↑</span>
+              </div>
+            </div>
+
+            {fireDanger && (
+              <button
+                type="button"
+                className="ember-fire-badge"
+                onClick={() => document.getElementById("smart-action-guide")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                aria-label={`${inSpread ? "This point is in the projected fire-spread area" : `Fire within 25 km, nearest ${nearestFireKm!.toFixed(1)} km away`}. Open action guide`}
+              >
+                <Flame size={13} />
+                <span>{inSpread ? "In fire-spread area" : `Fire ${nearestFireKm!.toFixed(1)} km away`}</span>
+                <ChevronRight size={13} />
+              </button>
+            )}
+            <div className="ember-map-bottom-left">
+              <div className="ember-map-tools">
+                <Button variant="ghost" size="icon" aria-label="Zoom in" onClick={() => mapRef.current?.zoomIn()}>
+                  <Plus size={17} />
+                </Button>
+                <Button variant="ghost" size="icon" aria-label="Zoom out" onClick={() => mapRef.current?.zoomOut()}>
+                  <Minus size={17} />
+                </Button>
+                <span />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Center map"
+                  onClick={() => mapRef.current?.panTo([selectedHotspot?.lng ?? 125.05, selectedHotspot?.lat ?? 7.95])}
+                >
+                  <LocateFixed size={16} />
+                </Button>
+              </div>
               {climate ? (
                 <div className="ember-map-legend" style={{ width: "min(380px, calc(100% - 90px))" }}>
                   <HeatScaleSlider
@@ -1069,11 +1059,7 @@ export function EmberDashboard() {
                 <div className="ember-map-legend">
                   <span className="ember-legend-title">DETECTION DENSITY</span>
                   <div className="ember-legend-scale">
-                    <i />
-                    <i />
-                    <i />
-                    <i />
-                    <i />
+                    <i /><i /><i /><i /><i />
                     <span>Low</span>
                     <span>High</span>
                   </div>
@@ -1084,9 +1070,6 @@ export function EmberDashboard() {
                   </div>
                 </div>
               )}
-              <div className="ember-map-compass">
-                N<span>↑</span>
-              </div>
             </div>
 
             <button

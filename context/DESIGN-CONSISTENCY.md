@@ -53,8 +53,6 @@ Current values are ad hoc: `2px, 3px, 4px, 5px, 6px, 8px, 99px, 50%` plus Tailwi
 | `app/globals.css:193,218,221` export/window/layer buttons | 5px | `--radius-control` |
 | `app/globals.css:219` `.ember-window-selector button` | 3px | `--radius-chip` |
 | `app/globals.css:263,268,273,287,300` checks, chips, status pills | 3px | `--radius-chip` |
-| `app/globals.css:147` `.ember-brand-mark` | 8px | `--radius-control` (it is a control-sized box, not a card) |
-| `app/globals.css:152` `.ember-nav-item` | 5px | `--radius-control` |
 | map overlays (`:235-256`) | 4px | `--radius-control` |
 | `app/ingestion/ingestion-client.tsx:117` step card | 6px | `--radius-card` |
 | `app/analytics/analytics-client.tsx:151,159` bar caps | 3px | `--radius-chip` |
@@ -75,7 +73,7 @@ The interface says the same thing up to four times on one screen. Rule: **each f
 
 ### Data mode ("sample", "simulated", "demo", "not connected")
 
-Owned by `components/ember-shell.tsx` — pill (`DEMO PREVIEW`, line 62) and sidebar subtitle (`Sample data preview`, line 70). Pages must not repeat it.
+Owned by `components/ember-shell.tsx` pill (`DEMO PREVIEW`, line 62). The old sidebar status card was removed with the legacy sidebar CSS. Pages must not repeat it.
 
 | File / line | Current | Action |
 |---|---|---|
