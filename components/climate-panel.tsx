@@ -2,7 +2,7 @@
 
 import type React from "react";
 import * as SliderPrimitive from "@radix-ui/react-slider";
-import { MapPin } from "lucide-react";
+import { Droplets, Thermometer } from "lucide-react";
 import type { HeatLevel } from "@/lib/action-guide";
 import type { Conditions } from "@/lib/conditions";
 import type { GuidePlace } from "@/lib/geocode";
@@ -14,10 +14,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
 
 /** Color scale bar matching the "Max Heat Index" reference legend. */
-export function HeatScaleLegend({ title, dark = false }: { title: string; dark?: boolean }) {
+export function HeatScaleLegend({ title }: { title: string }) {
   const swatches = HEAT_SCALE.map(([, color]) => color);
   return (
     <div role="img" aria-label={`${title}: color scale from 0 to above 50 °C`}>
@@ -226,7 +225,7 @@ function RangePicker({
 }
 
 
-/** Area level chips: only the levels that really exist for this place, each with its real name. */
+/** Area levels: stacked rows like the wildfire list — level left, real name right. */
 function AreaLevelPicker({
   levels,
   levelKey,
@@ -239,31 +238,31 @@ function AreaLevelPicker({
   missing: string | null;
 }) {
   if (levels === null) {
-    return <Skeleton className="mt-3 h-9 w-full" />;
+    return <Skeleton className="h-9 w-full" />;
   }
   if (levels.length === 0) {
-    return <p className="mt-3 text-xs text-muted-foreground">No administrative areas found here.</p>;
+    return <p className="text-xs text-muted-foreground">No administrative areas found here.</p>;
   }
   return (
-    <div className="mt-2">
+    <div>
       <RadioGroup
         value={levelKey ?? ""}
         onValueChange={onLevelChange}
         aria-label="Area level"
-        className="flex flex-wrap gap-1"
+        className="divide-y divide-border overflow-hidden rounded-lg border"
       >
         {levels.map((l) => {
           const on = l.key === levelKey;
           return (
-            <div key={l.key} className="flex items-center">
+            <div key={l.key} className={`flex items-center transition-colors ${on ? "bg-accent" : ""}`}>
               <RadioGroupItem value={l.key} id={`area-${l.key}`} className="sr-only" />
               <Label
                 htmlFor={`area-${l.key}`}
                 title={`${l.label}: ${l.name}`}
-                className={`flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 leading-tight transition-colors ${on ? "border-foreground bg-foreground text-background shadow-sm" : "border-border bg-background/60"}`}
+                className="flex w-full cursor-pointer items-center justify-between gap-2 px-2 py-1 leading-tight"
               >
-                <span className={`font-mono text-[8px] uppercase ${on ? "opacity-70" : "text-muted-foreground"}`}>{l.label}</span>
-                <span className={`text-[11px] ${on ? "font-bold" : "font-medium"}`}>{l.name}</span>
+                <span className="font-mono text-[9px] uppercase text-muted-foreground">{l.label}</span>
+                <span className={`truncate text-xs ${on ? "font-bold" : "font-medium"}`}>{l.name}</span>
               </Label>
             </div>
           );
@@ -334,27 +333,41 @@ export function ClimatePanel({
 }) {
   const badge = HEAT_BADGE[heat];
   const maxHi = conditions?.maxHeatIndexC ?? null;
+  const Icon = view === "temperature" ? Thermometer : Droplets;
+  const headline =
+    view === "temperature"
+      ? conditions?.tempC != null
+        ? `${Math.round(conditions.tempC)}°C now`
+        : "Temperature"
+      : heat === "None"
+        ? "No heat warning"
+        : heat;
   return (
-    <Card aria-live="polite" className="border-0 bg-transparent shadow-none">
-      <CardHeader className="space-y-1 p-3 pb-1">
-        <CardDescription className="flex items-center gap-1.5 font-semibold uppercase tracking-wide">
-          <span className="flex size-5 items-center justify-center rounded-md bg-sky-500/15 text-sky-600 dark:text-sky-400">
-            <MapPin size={12} />
-          </span>
-          {view === "temperature" ? "Temperature" : "Heat index"}
-        </CardDescription>
-        <CardTitle className="text-sm leading-tight">{place.name}</CardTitle>
-        <CardDescription className="-mt-0.5 text-[11px]">{place.region}</CardDescription>
+    <Card aria-live="polite" className="overflow-hidden border-0 bg-transparent shadow-none">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
+        <div>
+          <CardTitle className="flex items-center gap-1.5 text-sm">
+            <span className="flex size-5 items-center justify-center rounded-md bg-sky-500/15 text-sky-600 dark:text-sky-400">
+              <Icon size={12} />
+            </span>
+            {view === "temperature" ? "Temperature" : "Heat index"}{" "}
+            <Badge variant="secondary" className="font-mono text-[10px]">
+              {headline}
+            </Badge>
+          </CardTitle>
+          <CardDescription className="mt-0.5 text-[11px]">
+            {place.name} · {place.region}
+          </CardDescription>
+        </div>
       </CardHeader>
       <CardContent className="space-y-2 p-3 pt-0">
         <AreaLevelPicker levels={levels} levelKey={levelKey} onLevelChange={onLevelChange} missing={levelMissing} />
-        <Separator className="my-3" />
         {error ? (
-          <p className="mt-2.5 text-sm">Weather data is unavailable right now.</p>
+          <p className="text-sm">Weather data is unavailable right now.</p>
         ) : view === "temperature" ? (
           <>
             <Big value={conditions?.tempC ?? null} label={`Now · feels ${heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}`} />
-            <p className="text-xs text-muted-foreground">
+            <p className="text-[11px] text-muted-foreground">
               Humidity <b className="text-foreground">{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
               {" · "}Wind <b className="text-foreground">{conditions?.windKmh != null ? `${Math.round(conditions.windKmh)} km/h` : "…"}</b>
             </p>
@@ -362,14 +375,14 @@ export function ClimatePanel({
         ) : (
           <>
             <Big value={maxHi} label={`Max today · now ${heatIndexNow !== null ? `${Math.round(heatIndexNow)}°C` : "…"}`} />
-            <p className="flex flex-wrap items-center gap-x-1 text-xs text-muted-foreground">
+            <p className="flex flex-wrap items-center gap-x-1 text-[11px] text-muted-foreground">
               <span>Level</span>
-              <Badge variant="secondary">
+              <Badge variant="secondary" className="h-5 text-[10px]">
                 {badge.icon} {heat === "None" ? "No heat warning" : heat}
               </Badge>
-              <span>(PAGASA) · Temp</span>
+              <span>(PAGASA) ·</span>
               <b className="text-foreground">{conditions?.tempC != null ? `${Math.round(conditions.tempC)}°C` : "…"}</b>
-              <span>· Humidity</span>
+              <span>·</span>
               <b className="text-foreground">{conditions?.humidity != null ? `${Math.round(conditions.humidity)}%` : "…"}</b>
             </p>
           </>
@@ -386,7 +399,7 @@ export function ClimatePanel({
           coverageOf={coverageOf}
         />
 
-        <p className="mt-3 text-[10px] leading-snug text-muted-foreground" title="Dashed line = official OpenStreetMap border">
+        <p className="border-t border-border pt-2 text-[10px] leading-snug text-muted-foreground" title="Dashed line = official OpenStreetMap border">
           Tap map or search to check another spot. Source: Open-Meteo.
         </p>
       </CardContent>

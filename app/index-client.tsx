@@ -25,7 +25,6 @@ import {
   Radio,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Thermometer,
   Wind,
   X,
@@ -61,7 +60,6 @@ import {
   type ClusteredHotspot,
 } from "@/lib/firms-client";
 import { HistoricalFireNavigator } from "@/components/historical-fire-navigator";
-import { formatShortDate } from "@/lib/historical-fires";
 import {
   buildTimelineSteps,
   hotspotMatchesStep,
@@ -606,11 +604,13 @@ export function EmberDashboard() {
   }, [windQuery.data, place, viewBbox]);
 
   // Memoized: a new array every render would re-run the map's marker/pan effect and cut off fly-to animations.
+  const selectedHotspot = visibleHotspots.find((h) => h.id === selectedId) ?? visibleHotspots[0];
+  const selectedIndex = selectedHotspot ? visibleHotspots.indexOf(selectedHotspot) : 0;
   const mapIncidents = useMemo(
     () =>
       climate
         ? []
-        : visibleHotspots.map((h) => ({
+        : visibleHotspots.map((h, i) => ({
             name: h.name,
             count: h.count,
             severity: SEVERITY_OF[h.confidence],
@@ -618,8 +618,17 @@ export function EmberDashboard() {
             lng: h.lng,
             sources: h.sources,
             footprint: h.geoJsonPolygon,
+            // Label for the selected point: hover on desktop, tap again on mobile.
+            detail:
+              i === selectedIndex
+                ? {
+                    badge: `${BADGE_OF[h.confidence]}${h.fusedConfidencePercent !== undefined ? ` · ${h.fusedConfidencePercent}%` : ""}`,
+                    sub: `${h.proximityKm.toFixed(1)} km from nearest town`,
+                    stats: `${h.count} hotspots · ${(h.sources ?? [h.source]).join(" + ")} · ${h.brightness} K${h.frp !== undefined ? ` · ${h.frp} MW` : ""}`,
+                  }
+                : undefined,
           })),
-    [visibleHotspots, climate],
+    [visibleHotspots, climate, selectedIndex],
   );
   const pinLabel = !focusPlace
     ? ""
@@ -628,8 +637,6 @@ export function EmberDashboard() {
       : view === "heatindex"
         ? `${focusPlace.name} · HI ${maxHi !== null ? `${Math.round(maxHi)}°C` : "…"}`
         : focusPlace.name;
-  const selectedHotspot = visibleHotspots.find((h) => h.id === selectedId) ?? visibleHotspots[0];
-  const selectedIndex = selectedHotspot ? visibleHotspots.indexOf(selectedHotspot) : 0;
 
   // Spread on (or another fire picked): fly to that fire, close enough that its +1 h / +3 h / +6 h zones are
   // clearly visible. They are drawn true to scale, so at region zoom a light wind's zones hide under the marker.
@@ -1291,97 +1298,61 @@ export function EmberDashboard() {
               />
             ) : (
               <>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <Card className="overflow-hidden">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
                 <div>
-                  <CardTitle className="text-sm">
+                  <CardTitle className="flex items-center gap-1.5 text-sm">
                     {harmonized ? "Priority clusters" : "Raw detections"}{" "}
-                    <Badge variant="secondary" className="ml-1 font-mono">{visibleHotspots.length.toString().padStart(2, "0")}</Badge>
+                    <Badge variant="secondary" className="font-mono text-[10px]">{visibleHotspots.length.toString().padStart(2, "0")}</Badge>
                   </CardTitle>
-                  <CardDescription className="text-[11px]">
+                  <CardDescription className="mt-0.5 text-[11px]">
                     {harmonized
-                      ? "MODIS + VIIRS fused · nearest settlement first"
-                      : "Satellite pixels · nearest settlement first"}
+                      ? "MODIS + VIIRS fused · nearest first"
+                      : "Satellite pixels · nearest first"}
                   </CardDescription>
                 </div>
-                <Button variant="ghost" size="icon" aria-label="Incident options">
-                  <MoreHorizontal size={18} />
+                <Button variant="ghost" size="icon" className="size-7" aria-label="Incident options">
+                  <MoreHorizontal size={16} />
                 </Button>
               </CardHeader>
-              <CardContent className="pt-0">
-                <div className="max-h-64 space-y-1 overflow-y-auto pr-1">
-                  {visibleHotspots.map((hotspot) => {
+              <CardContent className="space-y-1 p-3 pt-0">
+                  {visibleHotspots.slice(0, 3).map((hotspot) => {
                     const active = selectedHotspot?.id === hotspot.id;
                     return (
                       <button
                         type="button"
                         key={hotspot.id}
                         onClick={() => setSelectedId(hotspot.id)}
-                        className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left transition-colors ${active ? "border-foreground bg-accent" : "border-transparent hover:border-border hover:bg-muted/50"}`}
+                        className={`flex w-full items-center gap-2 overflow-hidden rounded-lg border p-1.5 text-left transition-colors ${active ? "border-foreground bg-accent" : "border-transparent hover:border-border hover:bg-muted/50"}`}
                       >
-                        <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${hotspot.confidence === "high" ? "bg-destructive/15 text-destructive" : hotspot.confidence === "medium" ? "bg-orange-500/15 text-orange-600" : "bg-muted text-muted-foreground"}`}>
-                          <Flame size={14} />
+                        <span className={`flex size-6 shrink-0 items-center justify-center rounded-md ${hotspot.confidence === "high" ? "bg-destructive/15 text-destructive" : hotspot.confidence === "medium" ? "bg-orange-500/15 text-orange-600" : "bg-muted text-muted-foreground"}`}>
+                          <Flame size={13} />
                         </span>
-                        <span className="grid flex-1 leading-tight">
-                          <span className="flex items-center gap-1.5 text-xs font-medium">
+                        <span className="grid min-w-0 flex-1 leading-snug">
+                          <span className="flex items-center gap-1 text-xs font-medium">
                             <span className="truncate">{hotspot.name}</span>
-                            <Badge variant={hotspot.confidence === "high" ? "destructive" : "outline"} className="h-4 px-1 text-[9px]">
+                            <Badge variant={hotspot.confidence === "high" ? "destructive" : "outline"} className="h-3.5 shrink-0 px-1 text-[8px]">
                               {BADGE_OF[hotspot.confidence]}
                             </Badge>
-                            <b className="ml-auto font-mono text-[10px] font-semibold tabular-nums">{hotspot.proximityKm.toFixed(1)} km</b>
+                            <b className="ml-auto shrink-0 font-mono text-[10px] font-semibold tabular-nums">{hotspot.proximityKm.toFixed(1)} km</b>
                           </span>
-                          {!hotspot.name.startsWith("Sector") && (
-                            <span className="truncate text-[11px] text-muted-foreground">{place ? hotspot.settlement : hotspot.municipality === "Regional" ? hotspot.settlement : `${hotspot.municipality}, Bukidnon`}</span>
-                          )}
-                          <span className="text-[10px] text-muted-foreground">
-                            {hotspot.count} {harmonized ? "detections" : "px"} · {hotspot.acqTime}
+                          <span className="truncate text-[10px] text-muted-foreground">
+                            {!hotspot.name.startsWith("Sector") ? `${hotspot.settlement} · ` : ""}{hotspot.count} {harmonized ? "detections" : "px"} · {hotspot.acqTime}
                           </span>
                         </span>
                       </button>
                     );
                   })}
                   {visibleHotspots.length === 0 && (
-                    <div className="rounded-md border border-dashed p-3 text-center text-xs text-muted-foreground">No clusters match this search.</div>
+                    <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">No clusters match this search.</div>
                   )}
-                </div>
-                <Button variant="ghost" size="sm" className="mt-1 w-full justify-between" asChild>
+                <Button variant="ghost" size="sm" className="h-7 w-full justify-between px-2 text-[11px]" asChild>
                   <Link href="/detections">
-                    View all incidents <ChevronRight size={15} />
+                    View all incidents <ChevronRight size={14} />
                   </Link>
                 </Button>
               </CardContent>
             </Card>
-            {selectedHotspot && (
-              <Card className="border-foreground/20">
-                <CardHeader className="pb-2">
-                  <CardDescription className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide">
-                    <Sparkles size={13} /> Selected fire
-                  </CardDescription>
-                  <CardTitle className="flex flex-wrap items-center gap-1.5 text-sm">
-                    {selectedHotspot.name}
-                    <Badge variant={selectedHotspot.confidence === "high" ? "destructive" : "secondary"} className="text-[10px]">
-                      {BADGE_OF[selectedHotspot.confidence]}
-                      {selectedHotspot.fusedConfidencePercent !== undefined &&
-                        ` · ${selectedHotspot.fusedConfidencePercent}%`}
-                    </Badge>
-                  </CardTitle>
-                  <CardDescription className="text-[11px]">
-                    {selectedHotspot.proximityKm.toFixed(1)} km from nearest town
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="flex items-center gap-2 pt-0 text-xs">
-                  <Badge variant="outline" className="tabular-nums">
-                    <b>{selectedHotspot.count}</b>&nbsp;hotspots
-                  </Badge>
-                  <span className="inline-flex items-center gap-1 text-muted-foreground">
-                    <Radio size={13} />{" "}
-                    {(selectedHotspot.sources ?? [selectedHotspot.source]).join(" + ")} ·{" "}
-                    {selectedHotspot.brightness} K
-                    {selectedHotspot.frp !== undefined && ` · ${selectedHotspot.frp} MW`}
-                  </span>
-                </CardContent>
-              </Card>
-            )}
               </>
             )}
           </aside>

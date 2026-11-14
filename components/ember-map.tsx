@@ -19,6 +19,7 @@ export type EmberMapIncident = {
   lng: number;
   sources?: string[]; // sensors that saw a fused cluster, e.g. ["MODIS", "VIIRS"]
   footprint?: Polygon | Point; // fused cluster area from lib/harmonization
+  detail?: { badge: string; sub: string; stats: string }; // selected-point label (hover on desktop, tap on mobile)
 };
 
 export type EmberMapInstance = maplibregl.Map;
@@ -302,6 +303,16 @@ function addLandmarkLayers(map: maplibregl.Map, dark: boolean) {
 }
 
 const titleCase = (s: string) => s.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+const esc = (s: string | number) =>
+  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** Selected-point label: name + badge + distance + sensor stats, as one compact popup. */
+const detailHtml = (name: string, d: NonNullable<EmberMapIncident["detail"]>) =>
+  `<div style="font-family:var(--font-sans,sans-serif);font-size:12px;line-height:1.35;color:var(--popover-foreground,#111)">` +
+  `<div style="font-weight:700">${esc(name)} <span style="font-weight:600;font-size:10px;opacity:.75">${esc(d.badge)}</span></div>` +
+  `<div style="opacity:.75;font-size:11px">${esc(d.sub)}</div>` +
+  `<div style="opacity:.75;font-size:11px">${esc(d.stats)}</div></div>`;
 
 // `map.style` is gone once the map is removed (page change); effect cleanups can still run after that.
 const setData = (map: maplibregl.Map, id: string, data: FeatureCollection) =>
@@ -636,6 +647,7 @@ export function EmberMap({
     if (!map) return;
     markersRef.current.forEach((m) => m.remove());
     markersRef.current = [];
+    popupRef.current?.remove();
     if (!layers.clusteredHotspots) return;
     markersRef.current = incidents.map((incident, index) => {
       const el = document.createElement("div");
@@ -644,12 +656,30 @@ export function EmberMap({
       // Only numbers and a color from a fixed map go into this HTML; names are set via setText below.
       el.innerHTML = `<div class="ember-glow${index === selected ? " ember-glow-selected" : ""}" style="--glow:${SEVERITY_COLOR[incident.severity] ?? "#e2481f"}"><span class="ember-glow-halo"></span><span class="ember-glow-core">${Number(incident.count)}</span></div>`;
       const tip = `${incident.name} · ${incident.count} detections${incident.sources?.length ? ` · ${incident.sources.join(" + ")}` : ""}`;
+      const showDetail = () => {
+        if (incident.detail) popupRef.current?.setLngLat([incident.lng, incident.lat]).setHTML(detailHtml(incident.name, incident.detail)).addTo(map);
+      };
+      let pinned = false; // mobile: tapping the already-selected point toggles its label
       el.addEventListener("click", (ev) => {
         ev.stopPropagation();
+        if (index === selected && incident.detail) {
+          pinned = !pinned;
+          if (pinned) showDetail();
+          else popupRef.current?.remove();
+          return;
+        }
         selectRef.current(index);
       });
-      el.addEventListener("mouseenter", () => popupRef.current?.setLngLat([incident.lng, incident.lat]).setText(tip).addTo(map));
-      el.addEventListener("mouseleave", () => popupRef.current?.remove());
+      el.addEventListener("mouseenter", () => {
+        if (index === selected && incident.detail) {
+          if (!pinned) showDetail();
+        } else {
+          popupRef.current?.setLngLat([incident.lng, incident.lat]).setText(tip).addTo(map);
+        }
+      });
+      el.addEventListener("mouseleave", () => {
+        if (!pinned) popupRef.current?.remove();
+      });
       return new maplibregl.Marker({ element: el }).setLngLat([incident.lng, incident.lat]).addTo(map);
     });
     const current = incidents[selected];
