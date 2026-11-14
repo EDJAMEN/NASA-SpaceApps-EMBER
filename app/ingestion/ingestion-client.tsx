@@ -1,42 +1,24 @@
 "use client";
 
 import { useState } from "react";
+import { RefreshCw, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { EmberShell } from "@/components/ember-shell";
 import { SATELLITES, SYNC_LOGS } from "@/lib/hotspots";
 
 const STEPS = [
-  {
-    step: "STEP 01",
-    title: "FIRMS polling",
-    body: "Ingests rolling 24h & 48h CSV/JSON feeds.",
-    color: "var(--primary)",
-  },
-  {
-    step: "STEP 02",
-    title: "Coordinate ordering",
-    body: "Flips [Lat, Lon] into POINT(Lon Lat), SRID 4326.",
-    color: "var(--ember-amber)",
-  },
-  {
-    step: "STEP 03",
-    title: "Confidence normalization",
-    body: "Maps MODIS 0–100% and VIIRS l/n/h to low/medium/high.",
-    color: "var(--ember-green)",
-  },
-  {
-    step: "STEP 04",
-    title: "Spatial deduplication",
-    body: "Consolidates overlapping MODIS (1km) & VIIRS (375m) signals.",
-    color: "var(--ember-sky)",
-  },
-  {
-    step: "STEP 05",
-    title: "Idempotent upsert",
-    body: "ON CONFLICT skip; no duplicate records on repeat pulls.",
-    color: "var(--ember-coral)",
-  },
+  { title: "FIRMS polling", body: "Ingests rolling 24 h & 48 h CSV/JSON feeds." },
+  { title: "Coordinate ordering", body: "Flips [lat, lon] into POINT(lon lat), SRID 4326." },
+  { title: "Confidence normalization", body: "Maps MODIS 0–100% and VIIRS l/n/h to low/medium/high." },
+  { title: "Spatial deduplication", body: "Merges overlapping MODIS (1 km) and VIIRS (375 m) signals." },
+  { title: "Idempotent upsert", body: "ON CONFLICT skip: repeat pulls never duplicate records." },
 ];
+
+const logTone = (log: string) =>
+  log.includes("POSTGIS") || log.includes("COMPLETE") ? "text-emerald-600 dark:text-emerald-400" : log.includes("HARMONIZER") ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground";
 
 export function IngestionPage() {
   const [logs, setLogs] = useState<string[]>(SYNC_LOGS);
@@ -69,117 +51,73 @@ export function IngestionPage() {
           <p>Raw FIRMS payloads are transformed, deduplicated, and stored in PostGIS.</p>
         </div>
         <div className="ember-page-actions">
-          <Button
-            variant="outline"
-            className="ember-export-button"
-            onClick={triggerSync}
-            disabled={syncing}
-          >
-            {syncing ? "Syncing..." : "Trigger manual ingest"}
+          <Button size="sm" onClick={triggerSync} disabled={syncing}>
+            <RefreshCw className={`size-4 ${syncing ? "animate-spin" : ""}`} /> {syncing ? "Syncing…" : "Trigger manual ingest"}
           </Button>
         </div>
       </section>
 
-      <section className="ember-stat-grid" aria-label="Satellite feeds">
+      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" aria-label="Satellite feeds">
         {SATELLITES.map((sat) => (
-          <article className="ember-stat" key={sat.name}>
-            <div className="ember-stat-top">
-              <span>{sat.name}</span>
-              <span className="ember-pulse-dot" />
-            </div>
-            <div style={{ fontSize: "12px", fontWeight: 700 }}>{sat.sensor}</div>
-            <div className="ember-stat-foot">
-              <span>Spatial res: {sat.resolution}</span>
-              <span>Synced: {sat.lastSync}</span>
-            </div>
-          </article>
+          <Card key={sat.name}>
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-2">
+                <CardDescription className="truncate">{sat.name}</CardDescription>
+                <Badge variant="outline" className="gap-1.5 text-[10px]">
+                  <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden /> {sat.status.toLowerCase()}
+                </Badge>
+              </div>
+              <CardTitle className="text-lg font-semibold">{sat.sensor}</CardTitle>
+            </CardHeader>
+            <CardContent className="flex justify-between text-xs text-muted-foreground">
+              <span>{sat.resolution}</span>
+              <span>Synced {sat.lastSync}</span>
+            </CardContent>
+          </Card>
         ))}
       </section>
 
-      <section className="ember-map-section">
-        <div className="ember-section-heading">
-          <div>
-            <h2>Harmonization pipeline</h2>
-            <p>How raw FIRMS payloads are transformed before storage</p>
-          </div>
-        </div>
-        <div className="ember-panel">
-          <div
-            style={{
-              display: "grid",
-              gap: "10px",
-              gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-            }}
-          >
-            {STEPS.map((s) => (
-              <div key={s.step}>
-                <span
-                  style={{
-                    fontFamily: "var(--font-mono)",
-                    fontSize: "9px",
-                    fontWeight: 700,
-                    color: s.color,
-                  }}
-                >
-                  {s.step}
-                </span>
-                <h4 style={{ fontSize: "12px", fontWeight: 650, margin: "4px 0" }}>{s.title}</h4>
-                <p style={{ fontSize: "10px", color: "var(--muted-foreground)" }}>{s.body}</p>
-              </div>
+      <Card className="mt-6">
+        <CardHeader>
+          <CardTitle className="text-base">Harmonization pipeline</CardTitle>
+          <CardDescription>How raw FIRMS payloads are transformed before storage</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {STEPS.map((s, i) => (
+              <li key={s.title} className="relative">
+                <span className="grid size-7 place-items-center rounded-full border bg-muted font-mono text-xs font-semibold">{i + 1}</span>
+                <h3 className="mt-3 text-sm font-medium">{s.title}</h3>
+                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{s.body}</p>
+              </li>
             ))}
-          </div>
-        </div>
-      </section>
+          </ol>
+        </CardContent>
+      </Card>
 
-      <section className="ember-map-section">
-        <div className="ember-section-heading">
+      <Card className="mt-6">
+        <CardHeader className="flex-row items-center justify-between space-y-0">
           <div>
-            <h2>Ingestion log stream</h2>
-            <p>Daemon output</p>
+            <CardTitle className="text-base">Ingestion log</CardTitle>
+            <CardDescription>Daemon output, newest first</CardDescription>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            className="ember-layer-button"
-            onClick={() => setLogs([])}
-          >
-            Clear
+          <Button variant="ghost" size="sm" onClick={() => setLogs([])} disabled={!logs.length}>
+            <Trash2 className="size-4" /> Clear
           </Button>
-        </div>
-        <div className="ember-panel">
-          <div
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              display: "grid",
-              gap: "6px",
-              maxHeight: "280px",
-              overflowY: "auto",
-            }}
-          >
-            {logs.map((log, index) => (
-              <div
-                key={index}
-                style={{
-                  color:
-                    log.includes("POSTGIS") || log.includes("COMPLETE")
-                      ? "var(--ember-green)"
-                      : log.includes("HARMONIZER")
-                        ? "var(--ember-amber)"
-                        : "var(--muted-foreground)",
-                }}
-              >
-                {log}
-              </div>
-            ))}
-            {logs.length === 0 && (
-              <span style={{ color: "var(--muted-foreground)" }}>
-                Log cleared. Trigger a sync to generate entries.
-              </span>
-            )}
-          </div>
-        </div>
-      </section>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-72 rounded-md border bg-muted/30">
+            <div className="space-y-1.5 p-4 font-mono text-xs" role="log" aria-live="polite">
+              {logs.map((log, i) => (
+                <p key={`${i}-${log}`} className={logTone(log)}>
+                  {log}
+                </p>
+              ))}
+              {logs.length === 0 && <p className="text-muted-foreground">Log cleared. Trigger a sync to generate entries.</p>}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </EmberShell>
   );
 }

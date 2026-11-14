@@ -3,14 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { TELEMETRY_KEY, newest, type SidebarTelemetry } from "@/lib/telemetry";
 import {
   Check,
+  ChevronLeft,
   ChevronRight,
   Droplets,
   Globe,
   Layers,
   Satellite,
+  Wind,
   Map as MapIcon,
   Flame,
   LocateFixed,
@@ -72,13 +75,14 @@ const VIEWS: OverviewView[] = ["fires", "temperature", "heatindex"];
 const MAP_SEARCH_ID = "ember-map-search-input";
 const OVERVIEW_STORAGE_KEY = "ember.overview.v1";
 
-function readSavedOverview(): { place?: GuidePlace; view?: OverviewView; mapView?: MapView; realistic?: boolean; adminLevel?: string } {
+function readSavedOverview(): { place?: GuidePlace; view?: OverviewView; mapView?: MapView; realistic?: boolean; windTexture?: boolean; adminLevel?: string } {
   try {
     const saved = JSON.parse(localStorage.getItem(OVERVIEW_STORAGE_KEY) ?? "null") as {
       place?: Partial<GuidePlace> | null;
       view?: unknown;
       mapView?: unknown;
       realistic?: unknown;
+      windTexture?: unknown;
       adminLevel?: unknown;
     } | null;
     const p = saved?.place;
@@ -104,6 +108,7 @@ function readSavedOverview(): { place?: GuidePlace; view?: OverviewView; mapView
       view: VIEWS.includes(saved?.view as OverviewView) ? (saved!.view as OverviewView) : undefined,
       mapView: saved?.mapView === "globe" || saved?.mapView === "mercator" ? saved.mapView : undefined,
       realistic: typeof saved?.realistic === "boolean" ? saved.realistic : undefined,
+      windTexture: saved?.windTexture === true,
       adminLevel: typeof saved?.adminLevel === "string" ? saved.adminLevel : undefined,
     };
   } catch {
@@ -142,6 +147,8 @@ export function EmberDashboard() {
     firmsWms: false, // optional (Layers): live markers + heatspots show the same fires without spending the key's quota
     clusteredHotspots: true,
   });
+  // Third map style: the wind-speed colours as the map texture (earth.nullschool / Zoom Earth look).
+  const [windTexture, setWindTexture] = useState(false);
   const [restored, setRestored] = useState(false);
   const handleLocate = useCallback((place: GuidePlace) => {
     setPlace(place);
@@ -154,6 +161,7 @@ export function EmberDashboard() {
     if (saved.view) setView(saved.view);
     if (saved.mapView) setMapView(saved.mapView);
     if (saved.realistic !== undefined) setLayers((prev) => ({ ...prev, blueMarble: saved.realistic! }));
+    if (saved.windTexture) setWindTexture(true);
     if (saved.adminLevel) setAdminLevel(saved.adminLevel);
     setRestored(true);
   }, [handleLocate]);
@@ -162,12 +170,12 @@ export function EmberDashboard() {
     try {
       localStorage.setItem(
         OVERVIEW_STORAGE_KEY,
-        JSON.stringify({ place, view, mapView, realistic: layers.blueMarble, adminLevel }),
+        JSON.stringify({ place, view, mapView, realistic: layers.blueMarble, windTexture, adminLevel }),
       );
     } catch {
       // storage blocked (private mode etc.) — the page still works, it just won't remember
     }
-  }, [place, view, mapView, layers.blueMarble, adminLevel, restored]);
+  }, [place, view, mapView, layers.blueMarble, windTexture, adminLevel, restored]);
 
   const climate = view !== "fires"; // temperature or heat-index view
   const focusPlace = place ?? (climate ? DEFAULT_PLACE : null);
@@ -557,6 +565,26 @@ export function EmberDashboard() {
   // Wind overlays (Wildfires view): animated live wind, wind-driven spread estimate, heatspot glow.
   // Part of LIVE mode: wind and heatspots start on (LIVE is the default) and come back on when LIVE is picked.
   const [windOn, setWindOn] = useState(true);
+  // Floating side panel (wide screens): slide it away for a full view of the map; remembered on this device.
+  const [panelOpen, setPanelOpen] = useState(true);
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ember.panelOpen");
+      // Phones/tablets start on the full map (the panel would cover most of it); after that, the user's choice.
+      if (saved === "0" || (saved === null && window.matchMedia("(max-width: 1100px)").matches)) setPanelOpen(false);
+    } catch {
+      /* storage blocked: open */
+    }
+  }, []);
+  const togglePanel = (open: boolean) => {
+    setPanelOpen(open);
+    try {
+      localStorage.setItem("ember.panelOpen", open ? "1" : "0");
+    } catch {
+      /* not remembered */
+    }
+  };
+  const [windPace, setWindPace] = useState(1); // animation speed only (Slow 0.5× / Normal / Fast 2×), not the data
   const [spreadOn, setSpreadOn] = useState(false);
   const [heatOn, setHeatOn] = useState(true);
   const [viewBbox, setViewBbox] = useState<[number, number, number, number]>([7.3, 124.5, 8.6, 125.5]);
@@ -686,111 +714,150 @@ export function EmberDashboard() {
     };
   }, [isHistoricalMode, firmsQuery.isFetching, firmsQuery.isError, firmsQuery.error, firmsQuery.data]);
 
-  return (
-    <EmberShell active="overview" title="Overview" liveStatus={liveStatus}>
-      <section className="flex flex-wrap items-end justify-between gap-3">
-        <div className="space-y-1">
-          <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            <span className="size-1.5 rounded-full bg-emerald-500" /> Field operations <span className="opacity-70">/ Nov 13, 2026</span>
-          </p>
-          <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-            Good morning, team.
-          </h1>
-          <p className="text-sm text-muted-foreground">Here’s the latest across your monitored region.</p>
-        </div>
-        <div>
-          <Button variant="outline" asChild>
-            <Link href="/detections">
-              <Radio size={15} /> Export briefing
-            </Link>
-          </Button>
-        </div>
-      </section>
+  // Bottom sheet over the pinned map: dim the map as it slides up; offer a way back once it's well up.
+  const [sheetProgress, setSheetProgress] = useState(0);
+  useEffect(() => {
+    const onScroll = () => setSheetProgress(window.scrollY / Math.max(1, window.innerHeight));
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+  const mapDim = Math.min(0.55, sheetProgress * 0.7);
+  const showBackToMap = sheetProgress > 0.25;
+  // "]" toggles the right panel (not while typing).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.key !== "]" || e.metaKey || e.ctrlKey || e.altKey || t?.closest("input, textarea, select, [contenteditable=true]")) return;
+      e.preventDefault();
+      togglePanel(!panelOpen);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
-      <section className="ember-map-section space-y-3" id="map">
-        <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-          <div className="space-y-0.5">
-            <h2 className="text-lg font-bold tracking-tight">Regional overview</h2>
-            <p className="text-sm text-muted-foreground">{regionLabel}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <ToggleGroup
-              type="single"
-              value={mapView}
-              onValueChange={(v) => {
-                if (v === "globe" || v === "mercator") setMapView(v);
-              }}
-              aria-label="Map view"
-              className="rounded-lg border p-0.5"
-            >
-              {(
-                [
-                  ["globe", "Globe", Globe, "3D globe view"],
-                  ["mercator", "Flat", MapIcon, "Flat map view"],
-                ] as const
-              ).map(([key, label, Icon, title]) => (
-                <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 gap-1 px-2 text-[11px]">
-                  <Icon size={12} /> {label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <ToggleGroup
-              type="single"
-              value={layers.blueMarble ? "realistic" : "normal"}
-              onValueChange={(v) => {
-                if (v === "realistic") setLayers((prev) => ({ ...prev, blueMarble: true }));
-                else if (v === "normal") setLayers((prev) => ({ ...prev, blueMarble: false }));
-              }}
-              aria-label="Map style"
-              className="rounded-lg border p-0.5"
-            >
-              {(
-                [
-                  ["normal", "Normal", Layers, "Normal map: streets, labels and 3D buildings"],
-                  ["realistic", "Realistic", Satellite, "Realistic: NASA GIBS Blue Marble satellite imagery"],
-                ] as const
-              ).map(([key, label, Icon, title]) => (
-                <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 gap-1 px-2 text-[11px]">
-                  <Icon size={12} /> {label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-[11px]"
-              aria-label={`Location: ${focusPlace?.name ?? "Bukidnon region"}. Search a place`}
-              title="Search a place"
-              onClick={() => {
-                const input = document.getElementById(MAP_SEARCH_ID);
-                input?.scrollIntoView({ block: "center", behavior: "smooth" });
-                input?.focus({ preventScroll: true });
-              }}
-            >
-              <MapPin size={14} /> Location
-              <span className="max-w-[140px] truncate font-normal opacity-75">
-                {focusPlace?.name ?? "Bukidnon"}
-              </span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-[11px]"
-              onClick={() => setFiltersOpen(!filtersOpen)}
-            >
-              <SlidersHorizontal size={14} /> Layers
-            </Button>
-          </div>
-        </div>
-        {view === "fires" && (
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge className="h-7 gap-1.5 px-2.5 text-[11px]">
-              <span className="relative flex size-1.5">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
-                <span className="relative inline-flex size-1.5 rounded-full bg-current" />
-              </span>
-              {firmsQuery.isFetching ? "Loading live feed" : "Live"}
-            </Badge>
+  // Publish a live summary for the sidebar's telemetry cards (shown on every page via the shared query cache).
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!isLiveFeedActive) return;
+    const n = newest(filteredFires);
+    const today = new Date().toISOString().slice(0, 10);
+    const t: SidebarTelemetry = {
+      latest: n && {
+        name: n.name,
+        distanceKm: n.proximityKm,
+        date: n.acqDate === today ? "Today" : n.acqDate,
+        time: n.acqTime,
+        source: n.source,
+        conf: n.confidence,
+        lat: n.lat,
+        lng: n.lng,
+      },
+      window: {
+        fused: visibleHotspots.length,
+        raw: filteredFires.length,
+        dual: visibleHotspots.filter((h) => (h.sources?.length ?? 1) > 1).length,
+        viirs: filteredFires.filter((f) => f.source === "VIIRS").length,
+        modis: filteredFires.filter((f) => f.source === "MODIS").length,
+        bufferKm: firesNearby ? NEARBY_KM : null,
+      },
+      boundary: {
+        place: areaName,
+        windKmh: windHere ? Math.round(windHere.speed) : null,
+        from: windHere?.from ?? null,
+        toward: windHere?.toward ?? null,
+        inside: firesNearby ? 0 : filteredFires.length,
+        border: firesNearby ? filteredFires.length : 0,
+        spread: spreadOn ? "On" : "Off",
+        region: place?.region?.split(" · ").at(-1) || "Bukidnon",
+        sync: liveStatus.lastSync ?? "—",
+      },
+    };
+    queryClient.setQueryData(TELEMETRY_KEY, t);
+  }, [queryClient, isLiveFeedActive, filteredFires, visibleHotspots, firesNearby, areaName, windHere, spreadOn, place, liveStatus.lastSync]);
+
+  return (
+    <EmberShell
+      cover
+      active="overview"
+      title="Overview"
+      liveStatus={liveStatus}
+      headerLeft={
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 max-w-[160px] shrink-0 gap-1.5 border-primary/30 bg-primary/10 px-2.5 text-primary hover:bg-primary/15"
+          aria-label={`Location: ${focusPlace?.name ?? "Bukidnon region"}. Search a place`}
+          title={regionLabel}
+          onClick={() => document.getElementById(MAP_SEARCH_ID)?.focus()}
+        >
+          <MapPin size={14} />
+          <span className="truncate">{focusPlace?.name ?? "Bukidnon"}</span>
+        </Button>
+      }
+      headerSearch={
+        <PlaceCombobox
+          inputId={MAP_SEARCH_ID}
+          className="relative flex h-8 w-56 shrink-0 items-center gap-2 rounded-md border bg-background/70 px-2 text-muted-foreground [&>input]:h-full [&>input]:min-w-0 [&>input]:flex-1 [&>input]:bg-transparent [&>input]:text-xs [&>input]:text-foreground [&>input]:outline-none"
+          label="Search any place or filter incidents"
+          placeholder="Search any place or incident"
+          value={search}
+          onChange={setSearch}
+          onPick={(picked) => {
+            setSearch("");
+            handleLocate(picked);
+          }}
+          before={<Search size={14} className="shrink-0" />}
+          after={
+            search ? (
+              <button type="button" aria-label="Clear search" onClick={() => setSearch("")}>
+                <X size={13} />
+              </button>
+            ) : (
+              <kbd className="rounded border px-1 font-mono text-[9px]">⌘ K</kbd>
+            )
+          }
+        />
+      }
+      headerRight={
+        <>
+          <ToggleGroup type="single" value={mapView} onValueChange={(v) => (v === "globe" || v === "mercator") && setMapView(v)} aria-label="Map view" className="shrink-0 rounded-lg border p-0.5">
+            {(
+              [
+                ["globe", "Globe", Globe, "3D globe view"],
+                ["mercator", "Flat", MapIcon, "Flat map view"],
+              ] as const
+            ).map(([key, label, Icon, title]) => (
+              <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase gap-1">
+                <Icon size={12} /> {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <ToggleGroup
+            type="single"
+            value={windTexture ? "wind" : layers.blueMarble ? "realistic" : "normal"}
+            onValueChange={(v) => {
+              if (!v) return;
+              setWindTexture(v === "wind");
+              setLayers((prev) => ({ ...prev, blueMarble: v === "realistic" }));
+              if (v === "wind") setWindOn(true); // the texture IS the wind: make sure it's loaded
+            }}
+            aria-label="Map style"
+            className="shrink-0 rounded-lg border p-0.5"
+          >
+            {(
+              [
+                ["normal", "Normal", Layers, "Normal map: streets, labels and 3D buildings"],
+                ["realistic", "Realistic", Satellite, "Realistic: satellite imagery"],
+                ["wind", "Wind", Wind, "Wind: full-colour live wind speed with white streamlines"],
+              ] as const
+            ).map(([key, label, Icon, title]) => (
+              <ToggleGroupItem key={key} value={key} title={title} aria-label={label} className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase gap-1">
+                <Icon size={12} /> {label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          {view === "fires" && (
             <ToggleGroup
               type="multiple"
               value={[effectiveShowViirs ? "viirs" : "", showModis ? "modis" : ""].filter(Boolean)}
@@ -799,522 +866,579 @@ export function EmberDashboard() {
                 setShowModis(v.includes("modis"));
               }}
               aria-label="Sensor layers"
-              className="rounded-lg border p-0.5"
+              className="shrink-0 rounded-lg border p-0.5"
             >
-              <ToggleGroupItem value="viirs" disabled={isModisEraOnly} title={isModisEraOnly ? "VIIRS launched in 2012" : "Toggle VIIRS 375m layer"} aria-label="VIIRS" className="h-7 px-2 text-[11px]">
+              <ToggleGroupItem value="viirs" disabled={isModisEraOnly} title={isModisEraOnly ? "VIIRS launched in 2012" : "VIIRS 375 m"} aria-label="VIIRS" className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase">
                 VIIRS
               </ToggleGroupItem>
-              <ToggleGroupItem value="modis" aria-label="MODIS" className="h-7 px-2 text-[11px]">
+              <ToggleGroupItem value="modis" title="MODIS 1 km" aria-label="MODIS" className="h-7 px-2 font-mono text-[10px] font-semibold tracking-wide uppercase">
                 MODIS
               </ToggleGroupItem>
             </ToggleGroup>
-          </div>
-        )}
-        {view === "fires" && (
-          <Card
-            aria-label="Harmonized vs Unharmonized comparison"
-            className="border-primary/30 bg-gradient-to-b from-primary/[0.07] to-transparent"
-          >
-            <CardHeader className="p-3 pb-2">
-              <CardTitle className="flex flex-wrap items-center gap-2 text-[13px]">
-                <span className="flex size-5 items-center justify-center rounded-md bg-primary/15 text-primary">
-                  <Layers size={12} />
-                </span>
-                MODIS + VIIRS HARMONIZATION
-                <Badge className="font-mono text-[10px]">
-                  {harmonizationStats.mergedDuplicateCount > 0
-                    ? `-${harmonizationStats.reductionPercent}% duplicates merged`
-                    : "Sensor-fused"}
-                </Badge>
-              </CardTitle>
-              <CardDescription className="text-[11px]">
-                Compare cross-sensor fused fire events against raw unmerged MODIS (1 km) &amp; VIIRS (375 m) detections.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="p-3 pt-0">
-              <ToggleGroup
-                type="single"
-                value={harmonized ? "fused" : "raw"}
-                onValueChange={(v) => {
-                  if (v === "fused") setHarmonized(true);
-                  else if (v === "raw") setHarmonized(false);
+          )}
+          <Button variant="outline" size="sm" className="h-8 shrink-0 gap-1.5 font-mono text-[10px] uppercase" onClick={() => setFiltersOpen(!filtersOpen)}>
+            <SlidersHorizontal size={13} /> Layers
+          </Button>
+        </>
+      }
+    >
+      <div className="ember-cover">
+        {/* Full-screen map, pinned behind everything; panels float over it and never resize it. */}
+        <section className="ember-map-section fixed inset-0 z-0" id="map">
+          <div className="ember-map-layout">
+            <div
+              className="ember-map-canvas"
+              role="img"
+              aria-label={`OpenStreetMap-based thermal anomaly map of ${regionLabel}`}
+            >
+              <EmberMap
+                incidents={mapIncidents}
+                selected={Math.max(selectedIndex, 0)}
+                onSelect={(index) => {
+                  const hotspot = visibleHotspots[index];
+                  if (hotspot) setSelectedId(hotspot.id);
                 }}
-                aria-label="Harmonization mode"
-                className="grid grid-cols-2 gap-2"
-              >
-                <ToggleGroupItem value="fused" aria-label="Harmonized fused" className="h-auto flex-col items-start gap-0.5 border p-2 data-[state=on]:border-primary/60 data-[state=on]:bg-primary/[0.08] data-[state=on]:shadow-sm">
-                  <small className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-muted-foreground">
-                    <span className={`size-1.5 rounded-full ${harmonized ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
-                    HARMONIZED (FUSED)
-                  </small>
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <strong className="text-lg tabular-nums">{harmonizationStats.harmonizedClusterCount}</strong>
-                    <span className="text-[11px] text-muted-foreground">{harmonizationStats.dualSensorConfirmedCount} dual-sensor · ≥96% conf</span>
-                  </div>
-                </ToggleGroupItem>
-                <ToggleGroupItem value="raw" aria-label="Unharmonized raw" className="h-auto flex-col items-start gap-0.5 border p-2 data-[state=on]:border-primary/60 data-[state=on]:bg-primary/[0.08]">
-                  <small className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-muted-foreground">
-                    <span className={`size-1.5 rounded-full ${!harmonized ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
-                    UNHARMONIZED (RAW)
-                  </small>
-                  <div className="flex flex-wrap items-baseline gap-x-2">
-                    <strong className="text-lg tabular-nums">{harmonizationStats.rawDetectionCount}</strong>
-                    <span className="text-[11px] text-muted-foreground">
-                      {harmonizationStats.viirsRawCount} VIIRS · {harmonizationStats.modisRawCount} MODIS
-                    </span>
-                  </div>
-                </ToggleGroupItem>
-              </ToggleGroup>
-            </CardContent>
-          </Card>
-        )}
-        <div className="ember-map-layout">
-          <div
-            className="ember-map-canvas"
-            role="img"
-            aria-label={`OpenStreetMap-based thermal anomaly map of ${regionLabel}`}
-          >
-            <EmberMap
-              incidents={mapIncidents}
-              selected={Math.max(selectedIndex, 0)}
-              onSelect={(index) => {
-                const hotspot = visibleHotspots[index];
-                if (hotspot) setSelectedId(hotspot.id);
-              }}
-              dark={dark}
-              onReady={handleMapReady}
-              layers={layers}
-              showViirs={effectiveShowViirs}
-              showModis={showModis}
-              activeDate={activeScrubDate}
-              isHistoricalDate={isHistoricalMode}
-              onBoundsChange={(b) => setBbox((prev) => (keepBox(prev, b) ? prev : b))} // zooming in keeps the loaded fires
-              onViewChange={setViewBbox}
-              projection={mapView}
-              focus={focusPlace ? { lat: focusPlace.lat, lng: focusPlace.lng, label: pinLabel } : null}
-              areas={climate ? (contours?.areas ?? null) : null}
-              outline={boundary}
-              fitTo={boundaryBbox}
-              wind={!climate && windOn ? (windQuery.data ?? null) : null}
-              spread={!climate && spreadOn ? spread : null}
-              spreadWinds={!climate && spreadOn ? (fireWindQuery.data ?? null) : null}
-              spreadPreviewHour={
-                !climate && spreadOn && granularity === "subdaily" ? activeStep.spreadHours : null
-              }
-              heatPoints={!climate && heatOn ? heatPoints : null}
-              onMapClick={
-                climate
-                  ? (lat, lng) =>
-                      handleLocate({ name: "Selected point", region: `${lat.toFixed(3)}, ${lng.toFixed(3)}`, lat, lng })
-                  : undefined
-              }
-            />
+                dark={dark}
+                onReady={handleMapReady}
+                layers={layers}
+                showViirs={effectiveShowViirs}
+                showModis={showModis}
+                activeDate={activeScrubDate}
+                isHistoricalDate={isHistoricalMode}
+                onBoundsChange={(b) => setBbox((prev) => (keepBox(prev, b) ? prev : b))} // zooming in keeps the loaded fires
+                onViewChange={setViewBbox}
+                projection={mapView}
+                focus={focusPlace ? { lat: focusPlace.lat, lng: focusPlace.lng, label: pinLabel } : null}
+                areas={climate ? (contours?.areas ?? null) : null}
+                outline={boundary}
+                fitTo={boundaryBbox}
+                wind={!climate && windOn ? (windQuery.data ?? null) : null}
+                windTexture={windTexture}
+                windPace={windPace}
+                spread={!climate && spreadOn ? spread : null}
+                spreadWinds={!climate && spreadOn ? (fireWindQuery.data ?? null) : null}
+                spreadPreviewHour={
+                  !climate && spreadOn && granularity === "subdaily" ? activeStep.spreadHours : null
+                }
+                heatPoints={!climate && heatOn ? heatPoints : null}
+                onMapClick={
+                  climate
+                    ? (lat, lng) =>
+                        handleLocate({ name: "Selected point", region: `${lat.toFixed(3)}, ${lng.toFixed(3)}`, lat, lng })
+                    : undefined
+                }
+              />
 
-            <PlaceCombobox
-              inputId={MAP_SEARCH_ID}
-              className="ember-map-search"
-              label="Search any place or filter incidents"
-              placeholder="Search any place or incident"
-              value={search}
-              onChange={setSearch}
-              onPick={(picked) => {
-                setSearch("");
-                handleLocate(picked);
-              }}
-              before={<Search size={15} />}
-              after={
-                <>
-                  {search && (
-                    <button aria-label="Clear search" onClick={() => setSearch("")}>
-                      <X size={14} />
-                    </button>
-                  )}
-                  <kbd>⌘ K</kbd>
-                </>
-              }
-            />
-            {fireDanger && (
-              <button
-                type="button"
-                className="ember-fire-badge"
-                onClick={() => document.getElementById("smart-action-guide")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                aria-label={`${inSpread ? "This point is in the projected fire-spread area" : `Fire within 25 km, nearest ${nearestFireKm!.toFixed(1)} km away`}. Open action guide`}
-              >
-                <Flame size={13} />
-                <span>{inSpread ? "In fire-spread area" : `Fire ${nearestFireKm!.toFixed(1)} km away`}</span>
-                <ChevronRight size={13} />
-              </button>
-            )}
-            <div className="ember-map-tools">
+              {fireDanger && (
+                <button
+                  type="button"
+                  className="ember-fire-badge"
+                  onClick={() => document.getElementById("smart-action-guide")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+                  aria-label={`${inSpread ? "This point is in the projected fire-spread area" : `Fire within 25 km, nearest ${nearestFireKm!.toFixed(1)} km away`}. Open action guide`}
+                >
+                  <Flame size={13} />
+                  <span>{inSpread ? "In fire-spread area" : `Fire ${nearestFireKm!.toFixed(1)} km away`}</span>
+                  <ChevronRight size={13} />
+                </button>
+              )}
+              <div className="ember-map-tools">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Zoom in"
+                  onClick={() => mapRef.current?.zoomIn()}
+                >
+                  <Plus size={17} />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Zoom out"
+                  onClick={() => mapRef.current?.zoomOut()}
+                >
+                  <Minus size={17} />
+                </Button>
+                <span />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label="Center map"
+                  onClick={() =>
+                    mapRef.current?.panTo([
+                      // MapLibre takes [lng, lat]
+                      selectedHotspot?.lng ?? 125.05,
+                      selectedHotspot?.lat ?? 7.95,
+                    ])
+                  }
+                >
+                  <LocateFixed size={16} />
+                </Button>
+              </div>
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Zoom in"
-                onClick={() => mapRef.current?.zoomIn()}
-              >
-                <Plus size={17} />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Zoom out"
-                onClick={() => mapRef.current?.zoomOut()}
-              >
-                <Minus size={17} />
-              </Button>
-              <span />
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Center map"
+                className="ember-fullscreen"
+                aria-label="Expand map"
                 onClick={() =>
-                  mapRef.current?.panTo([
-                    // MapLibre takes [lng, lat]
-                    selectedHotspot?.lng ?? 125.05,
-                    selectedHotspot?.lat ?? 7.95,
-                  ])
+                  document.querySelector(".ember-map-section .ember-map-layout")?.classList.toggle("map-expanded")
                 }
               >
-                <LocateFixed size={16} />
+                <Maximize2 size={15} />
               </Button>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="ember-fullscreen"
-              aria-label="Expand map"
-              onClick={() =>
-                document.querySelector(".ember-map-section .ember-map-layout")?.classList.toggle("map-expanded")
-              }
-            >
-              <Maximize2 size={15} />
-            </Button>
-            {filtersOpen && (
-              <div className="ember-layer-popover">
-                <div>
-                  <b>Map layers</b>
-                  <button aria-label="Close layers" onClick={() => setFiltersOpen(false)}>
-                    <X size={14} />
-                  </button>
-                </div>
-                {(
-                  [
-                    { key: "blueMarble", label: "Blue Marble" },
-                    { key: "countryBorders", label: "Country Borders" },
-                    { key: "firmsWms", label: "FIRMS WMS Raster Dots" },
-                    { key: "clusteredHotspots", label: "Clustered Hotspots" },
-                  ] as const
-                ).map((item) => {
-                  const checked = layers[item.key];
-                  return (
-                    <button
-                      type="button"
-                      className="ember-layer-option"
-                      key={item.key}
-                      aria-pressed={checked}
-                      onClick={() =>
-                        setLayers((prev) => ({ ...prev, [item.key]: !prev[item.key] }))
-                      }
-                    >
-                      <span>{item.label}</span>
-                      <span className={`ember-layer-check ${checked ? "checked" : ""}`}>
-                        {checked && <Check size={12} />}
-                      </span>
+              {filtersOpen && (
+                <div className="ember-layer-popover">
+                  <div>
+                    <b>Map layers</b>
+                    <button aria-label="Close layers" onClick={() => setFiltersOpen(false)}>
+                      <X size={14} />
                     </button>
-                  );
-                })}
-                {["Thermal anomalies", "Settlement proximity", "Detection heatmap"].map((layer) => (
-                  <button
-                    type="button"
-                    className="ember-layer-option"
-                    key={layer}
-                    onClick={() => setSelectedLayer(layer)}
-                  >
-                    <span>{layer}</span>
-                    <span
-                      className={`ember-layer-check ${selectedLayer === layer ? "checked" : ""}`}
-                    >
-                      {selectedLayer === layer && <Check size={12} />}
-                    </span>
-                  </button>
-                ))}
-                <div className="ember-layer-divider" />
-                <label className="ember-confidence-label">CONFIDENCE</label>
-                <div className="ember-confidence-options">
-                  {[
-                    { value: "all", label: "All confidence" },
-                    { value: "high", label: "High" },
-                    { value: "medium", label: "Medium" },
-                    { value: "low", label: "Low" },
-                  ].map((item) => (
-                    <button
-                      type="button"
-                      aria-pressed={confidence === item.value}
-                      className={confidence === item.value ? "selected" : ""}
-                      key={item.value}
-                      onClick={() => setConfidence(item.value as "all" | Confidence)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {climate ? (
-              <div className="ember-map-legend" style={{ width: "min(380px, calc(100% - 90px))" }}>
-                <HeatScaleSlider
-                  title={view === "temperature" ? "Temperature" : "Max Heat Index"}
-                  range={range}
-                  domain={domain}
-                  onRangeChange={setTempRange}
-                />
-              </div>
-            ) : (
-              <div className="ember-map-legend">
-                <span className="ember-legend-title">DETECTION DENSITY</span>
-                <div className="ember-legend-scale">
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <i />
-                  <span>Low</span>
-                  <span>High</span>
-                </div>
-                <div className="ember-legend-divider" />
-                <div className="ember-legend-settlement">
-                  <MapPin size={12} /> Settlement{" "}
-                  <span className="ember-settlement-distance">&lt; 10 km</span>
-                </div>
-              </div>
-            )}
-            <div className="ember-map-compass">
-              N<span>↑</span>
-            </div>
-          </div>
-
-          <aside className="ember-incident-panel gap-3 bg-transparent p-3" id="incidents">
-            <Card className={climate ? "border-0 bg-transparent shadow-none" : undefined}>
-              <CardHeader className="space-y-1.5 p-2.5">
-                <Tabs value={view} onValueChange={(v) => setView(v as OverviewView)} aria-label="What to show on the map">
-                  <TabsList className="grid h-8 w-full grid-cols-3">
-                    {(
-                      [
-                        ["fires", "Wildfires", Flame],
-                        ["temperature", "Temperature", Thermometer],
-                        ["heatindex", "Heat index", Droplets],
-                      ] as const
-                    ).map(([key, label, Icon]) => (
-                      <TabsTrigger key={key} value={key} className="h-7 gap-1 px-1 text-[11px]">
-                        <Icon size={12} /> {label}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-                {view === "fires" && (
-                  <>
-                    <CardTitle className="pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Overlays</CardTitle>
-                    <ToggleGroup
-                      type="multiple"
-                      value={[windOn ? "wind" : "", spreadOn ? "spread" : "", heatOn ? "heat" : ""].filter(Boolean)}
-                      onValueChange={(v) => {
-                        setWindOn(v.includes("wind"));
-                        setSpreadOn(v.includes("spread"));
-                        setHeatOn(v.includes("heat"));
-                      }}
-                      aria-label="Wind and fire overlays"
-                      className="grid grid-cols-3 gap-1"
-                    >
-                      {(
-                        [
-                          ["wind", "Wind", windQuery.isFetching, "Animated live wind, coloured by speed"],
-                          ["spread", "Spread", fireWindQuery.isFetching, "Where the wind pushes each fire in 1, 3 and 6 h"],
-                          ["heat", "Heatspots", false, "Heat glow of the detections"],
-                        ] as const
-                      ).map(([val, label, busy, title]) => (
-                        <ToggleGroupItem key={val} value={val} title={title} aria-label={label} className="h-7 gap-1 px-1 text-[11px]">
-                          <i
-                            aria-hidden
-                            className="size-[7px] rounded-full border"
-                            style={{
-                              background: (val === "wind" ? windOn : val === "spread" ? spreadOn : heatOn) ? "#4cc36a" : "transparent",
-                              borderColor: (val === "wind" ? windOn : val === "spread" ? spreadOn : heatOn) ? "#4cc36a" : "currentColor",
-                            }}
-                          />
-                          {label}
-                          {busy ? <small className="text-[9px] opacity-80">…</small> : null}
-                        </ToggleGroupItem>
-                      ))}
-                    </ToggleGroup>
-                  </>
-                )}
-              </CardHeader>
-              {view === "fires" && (windOn || spreadOn || (firesNearby && (spreadOn || heatOn))) && (
-                <CardContent className="space-y-1.5 p-2.5 pt-0">
-                  {windOn && (
-                    <div className="rounded-md border bg-muted/40 p-1.5">
-                      {windQuery.isError ? (
-                        <span className="text-[11px] opacity-75">Wind unavailable. Try again in a minute.</span>
-                      ) : windHere ? (
-                        <p className="text-[11px] font-semibold tabular-nums">
-                          {Math.round(windHere.speed)} km/h from {windHere.from} → pushing {windHere.toward}
-                          {place ? <span className="font-normal text-muted-foreground"> · {place.name}</span> : null}
-                        </p>
-                      ) : (
-                        <span className="text-xs opacity-75">Loading wind…</span>
-                      )}
-                      <div
-                        className="mt-1.5 h-1.5 rounded-full"
-                        title={`10 m above ground · ${windQuery.data?.run ?? "NOAA GFS"}`}
-                        style={{ background: `linear-gradient(to right, ${WIND_SCALE.map(([, c]) => c).join(", ")})` }}
-                      />
-                      <div className="mt-0.5 flex justify-between font-mono text-[9px] text-muted-foreground">
-                        <span>{WIND_SCALE[0][0]}</span>
-                        <span>{WIND_SCALE[WIND_SCALE.length - 1][0]}+ km/h</span>
-                      </div>
-                    </div>
-                  )}
-                  {spreadOn && (
-                    <div className="flex items-center gap-3 text-xs">
-                      {([["+1 h", "#e3211c"], ["+3 h", "#ff8c1a"], ["+6 h", "#ffd000"]] as const).map(([t, c]) => (
-                        <span key={t} className="inline-flex items-center gap-1">
-                          <i className="size-2.5 rounded-[3px] opacity-80" style={{ background: c }} /> {t}
-                        </span>
-                      ))}
-                      <small className="ml-auto text-[10px] text-muted-foreground">
-                        {fireWindQuery.isError
-                          ? "Forecast unavailable."
-                          : spreadFires.length === 0
-                            ? "No fires to project."
-                            : `6 h · ${spreadFires.length} strongest.`}
-                      </small>
-                    </div>
-                  )}
-                  {firesNearby && (spreadOn || heatOn) && (
-                    <div role="status" className="rounded-md border border-orange-500/40 bg-orange-500/10 p-2 text-[11px]">
-                      No fires inside {areaName} right now. Showing <b>{filteredFires.length}</b> detection{filteredFires.length === 1 ? "" : "s"} within {NEARBY_KM} km of its border that the wind could push in.
-                    </div>
-                  )}
-                </CardContent>
-              )}
-            </Card>
-            {climate && focusPlace ? (
-              <ClimatePanel
-                view={view as "temperature" | "heatindex"}
-                place={focusPlace}
-                conditions={temp}
-                error={conditionsQuery.isError}
-                heatIndexNow={heatIdx}
-                heat={heat}
-                domain={domain}
-                range={range}
-                onRangeChange={setTempRange}
-                coverage={contours?.coverage ?? null}
-                areasLoading={levelsQuery.isLoading || boundaryQuery.isLoading || gridQuery.isLoading}
-                areasFailed={gridQuery.isError}
-                levels={levels}
-                levelKey={level?.key ?? null}
-                onLevelChange={chooseLevel}
-                levelMissing={borderMissing ? missingName : null}
-                coverageOf={boundary ? (boundaryName ?? focusPlace.name) : null}
-              />
-            ) : (
-              <>
-            <Card className="overflow-hidden">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
-                <div>
-                  <CardTitle className="flex items-center gap-1.5 text-sm">
-                    {harmonized ? "Priority clusters" : "Raw detections"}{" "}
-                    <Badge variant="secondary" className="font-mono text-[10px]">{visibleHotspots.length.toString().padStart(2, "0")}</Badge>
-                  </CardTitle>
-                  <CardDescription className="mt-0.5 text-[11px]">
-                    {harmonized
-                      ? "MODIS + VIIRS fused · nearest first"
-                      : "Satellite pixels · nearest first"}
-                  </CardDescription>
-                </div>
-                <Button variant="ghost" size="icon" className="size-7" aria-label="Incident options">
-                  <MoreHorizontal size={16} />
-                </Button>
-              </CardHeader>
-              <CardContent className="space-y-1 p-3 pt-0">
-                  {visibleHotspots.slice(0, 3).map((hotspot) => {
-                    const active = selectedHotspot?.id === hotspot.id;
+                  </div>
+                  {(
+                    [
+                      { key: "blueMarble", label: "Blue Marble" },
+                      { key: "countryBorders", label: "Country Borders" },
+                      { key: "firmsWms", label: "FIRMS WMS Raster Dots" },
+                      { key: "clusteredHotspots", label: "Clustered Hotspots" },
+                    ] as const
+                  ).map((item) => {
+                    const checked = layers[item.key];
                     return (
                       <button
                         type="button"
-                        key={hotspot.id}
-                        onClick={() => setSelectedId(hotspot.id)}
-                        className={`flex w-full items-center gap-2 overflow-hidden rounded-lg border p-1.5 text-left transition-colors ${active ? "border-foreground bg-accent" : "border-transparent hover:border-border hover:bg-muted/50"}`}
+                        className="ember-layer-option"
+                        key={item.key}
+                        aria-pressed={checked}
+                        onClick={() =>
+                          setLayers((prev) => ({ ...prev, [item.key]: !prev[item.key] }))
+                        }
                       >
-                        <span className={`flex size-6 shrink-0 items-center justify-center rounded-md ${hotspot.confidence === "high" ? "bg-destructive/15 text-destructive" : hotspot.confidence === "medium" ? "bg-orange-500/15 text-orange-600" : "bg-muted text-muted-foreground"}`}>
-                          <Flame size={13} />
-                        </span>
-                        <span className="grid min-w-0 flex-1 leading-snug">
-                          <span className="flex items-center gap-1 text-xs font-medium">
-                            <span className="truncate">{hotspot.name}</span>
-                            <Badge variant={hotspot.confidence === "high" ? "destructive" : "outline"} className="h-3.5 shrink-0 px-1 text-[8px]">
-                              {BADGE_OF[hotspot.confidence]}
-                            </Badge>
-                            <b className="ml-auto shrink-0 font-mono text-[10px] font-semibold tabular-nums">{hotspot.proximityKm.toFixed(1)} km</b>
-                          </span>
-                          <span className="truncate text-[10px] text-muted-foreground">
-                            {!hotspot.name.startsWith("Sector") ? `${hotspot.settlement} · ` : ""}{hotspot.count} {harmonized ? "detections" : "px"} · {hotspot.acqTime}
-                          </span>
+                        <span>{item.label}</span>
+                        <span className={`ember-layer-check ${checked ? "checked" : ""}`}>
+                          {checked && <Check size={12} />}
                         </span>
                       </button>
                     );
                   })}
-                  {visibleHotspots.length === 0 && (
-                    <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">No clusters match this search.</div>
+                  {["Thermal anomalies", "Settlement proximity", "Detection heatmap"].map((layer) => (
+                    <button
+                      type="button"
+                      className="ember-layer-option"
+                      key={layer}
+                      onClick={() => setSelectedLayer(layer)}
+                    >
+                      <span>{layer}</span>
+                      <span
+                        className={`ember-layer-check ${selectedLayer === layer ? "checked" : ""}`}
+                      >
+                        {selectedLayer === layer && <Check size={12} />}
+                      </span>
+                    </button>
+                  ))}
+                  <div className="ember-layer-divider" />
+                  <label className="ember-confidence-label">CONFIDENCE</label>
+                  <div className="ember-confidence-options">
+                    {[
+                      { value: "all", label: "All confidence" },
+                      { value: "high", label: "High" },
+                      { value: "medium", label: "Medium" },
+                      { value: "low", label: "Low" },
+                    ].map((item) => (
+                      <button
+                        type="button"
+                        aria-pressed={confidence === item.value}
+                        className={confidence === item.value ? "selected" : ""}
+                        key={item.value}
+                        onClick={() => setConfidence(item.value as "all" | Confidence)}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {climate ? (
+                <div className="ember-map-legend" style={{ width: "min(380px, calc(100% - 90px))" }}>
+                  <HeatScaleSlider
+                    title={view === "temperature" ? "Temperature" : "Max Heat Index"}
+                    range={range}
+                    domain={domain}
+                    onRangeChange={setTempRange}
+                  />
+                </div>
+              ) : (
+                <div className="ember-map-legend">
+                  <span className="ember-legend-title">DETECTION DENSITY</span>
+                  <div className="ember-legend-scale">
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                    <span>Low</span>
+                    <span>High</span>
+                  </div>
+                  <div className="ember-legend-divider" />
+                  <div className="ember-legend-settlement">
+                    <MapPin size={12} /> Settlement{" "}
+                    <span className="ember-settlement-distance">&lt; 10 km</span>
+                  </div>
+                </div>
+              )}
+              <div className="ember-map-compass">
+                N<span>↑</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              className="ember-panel-toggle"
+              data-open={panelOpen}
+              aria-controls="incidents"
+              aria-expanded={panelOpen}
+              aria-label={panelOpen ? "Hide side panel (full map view)" : "Show side panel"}
+              title={panelOpen ? "Hide panel" : "Show panel"}
+              onClick={() => togglePanel(!panelOpen)}
+            >
+              {panelOpen ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
+            </button>
+            <aside
+              className="ember-incident-panel gap-3 bg-transparent p-3"
+              id="incidents"
+              data-open={panelOpen}
+              inert={!panelOpen} // hidden panel: out of the tab order and screen readers too
+              onKeyDown={(e) => e.key === "Escape" && togglePanel(false)}
+            >
+              <Card className={climate ? "border-0 bg-transparent shadow-none" : undefined}>
+                <CardHeader className="space-y-1.5 p-2.5">
+                  <Tabs value={view} onValueChange={(v) => setView(v as OverviewView)} aria-label="What to show on the map">
+                    <TabsList className="grid h-8 w-full grid-cols-3">
+                      {(
+                        [
+                          ["fires", "Wildfires", Flame],
+                          ["temperature", "Temperature", Thermometer],
+                          ["heatindex", "Heat index", Droplets],
+                        ] as const
+                      ).map(([key, label, Icon]) => (
+                        <TabsTrigger key={key} value={key} className="h-7 gap-1 px-1 text-[11px]">
+                          <Icon size={12} /> {label}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                  </Tabs>
+                  {view === "fires" && (
+                    <>
+                      <CardTitle className="pt-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Overlays</CardTitle>
+                      <ToggleGroup
+                        type="multiple"
+                        value={[windOn ? "wind" : "", spreadOn ? "spread" : "", heatOn ? "heat" : ""].filter(Boolean)}
+                        onValueChange={(v) => {
+                          setWindOn(v.includes("wind"));
+                          setSpreadOn(v.includes("spread"));
+                          setHeatOn(v.includes("heat"));
+                        }}
+                        aria-label="Wind and fire overlays"
+                        className="grid grid-cols-3 gap-1"
+                      >
+                        {(
+                          [
+                            ["wind", "Wind", windQuery.isFetching, "Animated live wind, coloured by speed"],
+                            ["spread", "Spread", fireWindQuery.isFetching, "Where the wind pushes each fire in 1, 3 and 6 h"],
+                            ["heat", "Heatspots", false, "Heat glow of the detections"],
+                          ] as const
+                        ).map(([val, label, busy, title]) => (
+                          <ToggleGroupItem key={val} value={val} title={title} aria-label={label} className="h-7 gap-1 px-1 text-[11px]">
+                            <i
+                              aria-hidden
+                              className="size-[7px] rounded-full border"
+                              style={{
+                                background: (val === "wind" ? windOn : val === "spread" ? spreadOn : heatOn) ? "#4cc36a" : "transparent",
+                                borderColor: (val === "wind" ? windOn : val === "spread" ? spreadOn : heatOn) ? "#4cc36a" : "currentColor",
+                              }}
+                            />
+                            {label}
+                            {busy ? <small className="text-[9px] opacity-80">…</small> : null}
+                          </ToggleGroupItem>
+                        ))}
+                      </ToggleGroup>
+                    </>
                   )}
-                <Button variant="ghost" size="sm" className="h-7 w-full justify-between px-2 text-[11px]" asChild>
+                </CardHeader>
+                {view === "fires" && (windOn || spreadOn || (firesNearby && (spreadOn || heatOn))) && (
+                  <CardContent className="space-y-1.5 p-2.5 pt-0">
+                    {windOn && (
+                      <div className="rounded-md border bg-muted/40 p-1.5">
+                        {windQuery.isError ? (
+                          <span className="text-[11px] opacity-75">Wind unavailable. Try again in a minute.</span>
+                        ) : windHere ? (
+                          <p className="text-[11px] font-semibold tabular-nums">
+                            {Math.round(windHere.speed)} km/h from {windHere.from} → pushing {windHere.toward}
+                            {place ? <span className="font-normal text-muted-foreground"> · {place.name}</span> : null}
+                          </p>
+                        ) : (
+                          <span className="text-xs opacity-75">Loading wind…</span>
+                        )}
+                        <div
+                          className="mt-1.5 h-1.5 rounded-full"
+                          title={`10 m above ground · ${windQuery.data?.run ?? "NOAA GFS"}`}
+                          style={{ background: `linear-gradient(to right, ${WIND_SCALE.map(([, c]) => c).join(", ")})` }}
+                        />
+                        <div className="mt-0.5 flex justify-between font-mono text-[9px] text-muted-foreground">
+                          <span>{WIND_SCALE[0][0]}</span>
+                          <span>{WIND_SCALE[WIND_SCALE.length - 1][0]}+ km/h</span>
+                        </div>
+                        <div className="mt-1.5 flex items-center gap-1 text-[10px]" role="radiogroup" aria-label="Wind animation speed">
+                          <span className="mr-auto text-muted-foreground">Animation</span>
+                          {([[0.5, "Slow"], [1, "Normal"], [2, "Fast"]] as const).map(([v, label]) => (
+                            <button
+                              key={label}
+                              type="button"
+                              role="radio"
+                              aria-checked={windPace === v}
+                              onClick={() => setWindPace(v)}
+                              className={`rounded px-1.5 py-0.5 ${windPace === v ? "bg-accent font-semibold text-accent-foreground" : "text-muted-foreground"}`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {spreadOn && (
+                      <div className="flex items-center gap-3 text-xs">
+                        {([["+1 h", "#e3211c"], ["+3 h", "#ff8c1a"], ["+6 h", "#ffd000"]] as const).map(([t, c]) => (
+                          <span key={t} className="inline-flex items-center gap-1">
+                            <i className="size-2.5 rounded-[3px] opacity-80" style={{ background: c }} /> {t}
+                          </span>
+                        ))}
+                        <small className="ml-auto text-[10px] text-muted-foreground">
+                          {fireWindQuery.isError
+                            ? "Forecast unavailable."
+                            : spreadFires.length === 0
+                              ? "No fires to project."
+                              : `6 h · ${spreadFires.length} strongest.`}
+                        </small>
+                      </div>
+                    )}
+                    {firesNearby && (spreadOn || heatOn) && (
+                      <div role="status" className="rounded-md border border-orange-500/40 bg-orange-500/10 p-2 text-[11px]">
+                        No fires inside {areaName} right now. Showing <b>{filteredFires.length}</b> detection{filteredFires.length === 1 ? "" : "s"} within {NEARBY_KM} km of its border that the wind could push in.
+                      </div>
+                    )}
+                  </CardContent>
+                )}
+              </Card>
+              {climate && focusPlace ? (
+                <ClimatePanel
+                  view={view as "temperature" | "heatindex"}
+                  place={focusPlace}
+                  conditions={temp}
+                  error={conditionsQuery.isError}
+                  heatIndexNow={heatIdx}
+                  heat={heat}
+                  domain={domain}
+                  range={range}
+                  onRangeChange={setTempRange}
+                  coverage={contours?.coverage ?? null}
+                  areasLoading={levelsQuery.isLoading || boundaryQuery.isLoading || gridQuery.isLoading}
+                  areasFailed={gridQuery.isError}
+                  levels={levels}
+                  levelKey={level?.key ?? null}
+                  onLevelChange={chooseLevel}
+                  levelMissing={borderMissing ? missingName : null}
+                  coverageOf={boundary ? (boundaryName ?? focusPlace.name) : null}
+                />
+              ) : (
+                <>
+              <Card className="overflow-hidden">
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 p-3 pb-2">
+                  <div>
+                    <CardTitle className="flex items-center gap-1.5 text-sm">
+                      {harmonized ? "Priority clusters" : "Raw detections"}{" "}
+                      <Badge variant="secondary" className="font-mono text-[10px]">{visibleHotspots.length.toString().padStart(2, "0")}</Badge>
+                    </CardTitle>
+                    <CardDescription className="mt-0.5 text-[11px]">
+                      {harmonized
+                        ? "MODIS + VIIRS fused · nearest first"
+                        : "Satellite pixels · nearest first"}
+                    </CardDescription>
+                  </div>
+                  <Button variant="ghost" size="icon" className="size-7" aria-label="Incident options">
+                    <MoreHorizontal size={16} />
+                  </Button>
+                </CardHeader>
+                <CardContent className="space-y-1 p-3 pt-0">
+                    {visibleHotspots.slice(0, 3).map((hotspot) => {
+                      const active = selectedHotspot?.id === hotspot.id;
+                      return (
+                        <button
+                          type="button"
+                          key={hotspot.id}
+                          onClick={() => setSelectedId(hotspot.id)}
+                          className={`flex w-full items-center gap-2 overflow-hidden rounded-lg border p-1.5 text-left transition-colors ${active ? "border-foreground bg-accent" : "border-transparent hover:border-border hover:bg-muted/50"}`}
+                        >
+                          <span className={`flex size-6 shrink-0 items-center justify-center rounded-md ${hotspot.confidence === "high" ? "bg-destructive/15 text-destructive" : hotspot.confidence === "medium" ? "bg-orange-500/15 text-orange-600" : "bg-muted text-muted-foreground"}`}>
+                            <Flame size={13} />
+                          </span>
+                          <span className="grid min-w-0 flex-1 leading-snug">
+                            <span className="flex items-center gap-1 text-xs font-medium">
+                              <span className="truncate">{hotspot.name}</span>
+                              <Badge variant={hotspot.confidence === "high" ? "destructive" : "outline"} className="h-3.5 shrink-0 px-1 text-[8px]">
+                                {BADGE_OF[hotspot.confidence]}
+                              </Badge>
+                              <b className="ml-auto shrink-0 font-mono text-[10px] font-semibold tabular-nums">{hotspot.proximityKm.toFixed(1)} km</b>
+                            </span>
+                            <span className="truncate text-[10px] text-muted-foreground">
+                              {!hotspot.name.startsWith("Sector") ? `${hotspot.settlement} · ` : ""}{hotspot.count} {harmonized ? "detections" : "px"} · {hotspot.acqTime}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {visibleHotspots.length === 0 && (
+                      <div className="rounded-md border border-dashed p-2 text-center text-[11px] text-muted-foreground">No clusters match this search.</div>
+                    )}
+                  <Button variant="ghost" size="sm" className="h-7 w-full justify-between px-2 text-[11px]" asChild>
+                    <Link href="/detections">
+                      View all incidents <ChevronRight size={14} />
+                    </Link>
+                  </Button>
+                </CardContent>
+              </Card>
+                </>
+              )}
+            </aside>
+          </div>
+        </section>
+        {/* Theater-style dimming as the sheet slides up. */}
+        <div aria-hidden className="pointer-events-none fixed inset-0 z-[1] bg-black" style={{ opacity: mapDim }} />
+        <div className="pointer-events-none relative z-10">
+          <div className="h-[calc(100vh-76px-68px)]" />
+          <div className="pointer-events-auto rounded-t-3xl border-t bg-background px-4 pb-16 shadow-[0_-12px_40px_rgba(0,0,0,0.18)] sm:px-6">
+            <div className="sticky top-[68px] z-20 -mx-4 rounded-t-3xl bg-background/95 px-4 pt-2 pb-3 backdrop-blur sm:-mx-6 sm:px-6">
+              <div aria-hidden className="mx-auto mb-2 h-1 w-10 rounded-full bg-muted-foreground/30" />
+              <HistoricalFireNavigator
+                todayStr={todayStr}
+                quickRange={quickRange}
+                granularity={granularity}
+                historicalDate={historicalDate}
+                spanDays={spanDays}
+                steps={timelineModel.steps}
+                scrubIndex={clampedScrubIndex}
+                startLabel={timelineModel.startLabel}
+                endLabel={timelineModel.endLabel}
+                isHistorical={isHistoricalMode}
+                isModisEraOnly={isModisEraOnly}
+                playing={playing}
+                spreadOn={spreadOn}
+                loadingArchive={isHistoricalMode && firmsQuery.isFetching}
+                onSelectQuickRange={handleSelectQuickRange}
+                onChangeGranularity={handleChangeGranularity}
+                onSelectHistoricalDate={handleSelectHistoricalDate}
+                onChangeSpanDays={handleChangeSpanDays}
+                onBackToLive={handleBackToLive}
+                onScrubChange={(idx) => {
+                  setPlaying(false);
+                  setScrubIndex(idx);
+                }}
+                onTogglePlay={() => {
+                  if (!playing && clampedScrubIndex >= timelineModel.steps.length - 1) {
+                    setScrubIndex(0);
+                  }
+                  setPlaying(!playing);
+                }}
+              />
+            </div>
+            <div className="space-y-4 pt-4">
+            <section className="flex flex-wrap items-end justify-between gap-3">
+              <div className="space-y-1">
+                <p className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+                  <span className="size-1.5 rounded-full bg-emerald-500" /> Field operations <span className="opacity-70">/ Nov 13, 2026</span>
+                </p>
+                <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
+                  Good morning, team.
+                </h1>
+                <p className="text-sm text-muted-foreground">Here’s the latest across your monitored region.</p>
+              </div>
+              <div>
+                <Button variant="outline" asChild>
                   <Link href="/detections">
-                    View all incidents <ChevronRight size={14} />
+                    <Radio size={15} /> Export briefing
                   </Link>
                 </Button>
-              </CardContent>
-            </Card>
-              </>
-            )}
-          </aside>
-        </div>
-        <HistoricalFireNavigator
-          todayStr={todayStr}
-          quickRange={quickRange}
-          granularity={granularity}
-          historicalDate={historicalDate}
-          spanDays={spanDays}
-          steps={timelineModel.steps}
-          scrubIndex={clampedScrubIndex}
-          startLabel={timelineModel.startLabel}
-          endLabel={timelineModel.endLabel}
-          isHistorical={isHistoricalMode}
-          isModisEraOnly={isModisEraOnly}
-          playing={playing}
-          spreadOn={spreadOn}
-          loadingArchive={isHistoricalMode && firmsQuery.isFetching}
-          onSelectQuickRange={handleSelectQuickRange}
-          onChangeGranularity={handleChangeGranularity}
-          onSelectHistoricalDate={handleSelectHistoricalDate}
-          onChangeSpanDays={handleChangeSpanDays}
-          onBackToLive={handleBackToLive}
-          onScrubChange={(idx) => {
-            setPlaying(false);
-            setScrubIndex(idx);
-          }}
-          onTogglePlay={() => {
-            if (!playing && clampedScrubIndex >= timelineModel.steps.length - 1) {
-              setScrubIndex(0);
-            }
-            setPlaying(!playing);
-          }}
-        />
-        <div id="smart-action-guide" className="scroll-mt-20">
-          <SmartActionGuide place={place ?? DEFAULT_PLACE} onLocate={handleLocate} />
-        </div>
+              </div>
+            </section>
 
-      </section>
+            {view === "fires" && (
+              <Card
+                aria-label="Harmonized vs Unharmonized comparison"
+                className="border-primary/30 bg-gradient-to-b from-primary/[0.07] to-transparent"
+              >
+                <CardHeader className="p-3 pb-2">
+                  <CardTitle className="flex flex-wrap items-center gap-2 text-[13px]">
+                    <span className="flex size-5 items-center justify-center rounded-md bg-primary/15 text-primary">
+                      <Layers size={12} />
+                    </span>
+                    MODIS + VIIRS HARMONIZATION
+                    <Badge className="font-mono text-[10px]">
+                      {harmonizationStats.mergedDuplicateCount > 0
+                        ? `-${harmonizationStats.reductionPercent}% duplicates merged`
+                        : "Sensor-fused"}
+                    </Badge>
+                  </CardTitle>
+                  <CardDescription className="text-[11px]">
+                    Compare cross-sensor fused fire events against raw unmerged MODIS (1 km) &amp; VIIRS (375 m) detections.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="p-3 pt-0">
+                  <ToggleGroup
+                    type="single"
+                    value={harmonized ? "fused" : "raw"}
+                    onValueChange={(v) => {
+                      if (v === "fused") setHarmonized(true);
+                      else if (v === "raw") setHarmonized(false);
+                    }}
+                    aria-label="Harmonization mode"
+                    className="grid grid-cols-2 gap-2"
+                  >
+                    <ToggleGroupItem value="fused" aria-label="Harmonized fused" className="h-auto flex-col items-start gap-0.5 border p-2 data-[state=on]:border-primary/60 data-[state=on]:bg-primary/[0.08] data-[state=on]:shadow-sm">
+                      <small className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-muted-foreground">
+                        <span className={`size-1.5 rounded-full ${harmonized ? "bg-emerald-500" : "bg-muted-foreground/40"}`} />
+                        HARMONIZED (FUSED)
+                      </small>
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <strong className="text-lg tabular-nums">{harmonizationStats.harmonizedClusterCount}</strong>
+                        <span className="text-[11px] text-muted-foreground">{harmonizationStats.dualSensorConfirmedCount} dual-sensor · ≥96% conf</span>
+                      </div>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="raw" aria-label="Unharmonized raw" className="h-auto flex-col items-start gap-0.5 border p-2 data-[state=on]:border-primary/60 data-[state=on]:bg-primary/[0.08]">
+                      <small className="flex items-center gap-1 text-[10px] font-semibold tracking-wide text-muted-foreground">
+                        <span className={`size-1.5 rounded-full ${!harmonized ? "bg-amber-500" : "bg-muted-foreground/40"}`} />
+                        UNHARMONIZED (RAW)
+                      </small>
+                      <div className="flex flex-wrap items-baseline gap-x-2">
+                        <strong className="text-lg tabular-nums">{harmonizationStats.rawDetectionCount}</strong>
+                        <span className="text-[11px] text-muted-foreground">
+                          {harmonizationStats.viirsRawCount} VIIRS · {harmonizationStats.modisRawCount} MODIS
+                        </span>
+                      </div>
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                </CardContent>
+              </Card>
+            )}
+            <div id="smart-action-guide" className="scroll-mt-20">
+              <SmartActionGuide place={place ?? DEFAULT_PLACE} onLocate={handleLocate} />
+            </div>
+
+            </div>
+          </div>
+        </div>
+        {showBackToMap && (
+          <Button className="fixed right-5 bottom-5 z-30 rounded-full shadow-xl" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}>
+            <MapIcon size={16} /> Back to map
+          </Button>
+        )}
+      </div>
     </EmberShell>
   );
 }

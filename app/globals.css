@@ -1000,3 +1000,103 @@
   .ember-main { margin-left: 0 !important; }
   * { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
 }
+
+/* Overview side panel (wide screens): see-through glass, slides out to the right for a full map view. */
+.ember-panel-toggle { display: none; }
+@media (min-width: 1101px) {
+  .ember-map-section .ember-incident-panel {
+    background: color-mix(in oklab, var(--card) 55%, transparent);
+    transition: transform .32s cubic-bezier(.22, 1, .36, 1), opacity .32s;
+  }
+  /* Panel sections are glass too; buttons, toggles and badges keep their solid fills. */
+  .ember-map-section .ember-incident-panel > .bg-card,
+  .ember-map-section .ember-incident-panel > [class*="bg-card"] { background: color-mix(in oklab, var(--card) 62%, transparent); }
+  .ember-map-section .ember-incident-panel[data-open="false"] { transform: translateX(calc(100% + 20px)); opacity: 0; pointer-events: none; }
+  .ember-panel-toggle {
+    position: absolute; z-index: 6; top: 50%; right: calc(14px + 320px + 6px);
+    display: grid; width: 22px; height: 56px; place-items: center; translate: 0 -50%;
+    border: 1px solid var(--border); border-radius: 8px 0 0 8px; border-right: 0;
+    background: var(--card); color: var(--foreground); box-shadow: -4px 4px 14px oklch(0.15 0.02 170 / 18%);
+    cursor: pointer; transition: right .32s cubic-bezier(.22, 1, .36, 1);
+  }
+  .ember-panel-toggle[data-open="false"] { right: 0; }
+  .ember-panel-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+
+/* Phones & tablets: the same slide-out panel, floating over the map instead of stacked under it. */
+@media (max-width: 1100px) {
+  .ember-map-section .ember-map-layout { display: block; position: relative; }
+  .ember-map-section .ember-map-canvas { min-height: clamp(420px, 72vh, 680px); }
+  .ember-map-section .ember-incident-panel {
+    --panel-w: min(320px, calc(100% - 52px));
+    position: absolute; z-index: 5; top: 8px; right: 8px; bottom: 8px; width: var(--panel-w);
+    overflow-y: auto; overscroll-behavior: contain;
+    border: 1px solid var(--border); border-radius: var(--radius-card);
+    background: color-mix(in oklab, var(--card) 72%, transparent); backdrop-filter: blur(14px);
+    box-shadow: 0 12px 40px oklch(0.15 0.02 170 / 22%);
+    transition: transform .32s cubic-bezier(.22, 1, .36, 1), opacity .32s;
+  }
+  .ember-map-section .ember-incident-panel > [class*="bg-card"] { background: color-mix(in oklab, var(--card) 70%, transparent); }
+  .ember-map-section .ember-incident-panel[data-open="false"] { transform: translateX(calc(100% + 14px)); opacity: 0; pointer-events: none; }
+  .ember-panel-toggle {
+    position: absolute; z-index: 6; top: 50%; right: calc(8px + min(320px, calc(100% - 52px)) + 4px);
+    display: grid; width: 28px; height: 64px; place-items: center; translate: 0 -50%;
+    border: 1px solid var(--border); border-right: 0; border-radius: 10px 0 0 10px;
+    background: var(--card); color: var(--foreground); box-shadow: -4px 4px 14px oklch(0.15 0.02 170 / 18%);
+    transition: right .32s cubic-bezier(.22, 1, .36, 1); touch-action: manipulation;
+  }
+  .ember-panel-toggle[data-open="false"] { right: 0; }
+  .ember-panel-toggle:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+}
+@media (max-width: 420px) { .ember-map-section .ember-incident-panel { font-size: 0.95em; } }
+
+/* Sidebar telemetry: minimal live motion (all of it stops for prefers-reduced-motion). */
+.ember-live-dot { position: relative; width: 6px; height: 6px; flex: none; border-radius: 9999px; background: #22c55e; }
+.ember-live-dot::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: #22c55e; animation: ember-pulse 1.8s ease-out infinite; }
+@keyframes ember-pulse { from { transform: scale(1); opacity: .7; } to { transform: scale(2.8); opacity: 0; } }
+
+.ember-tick { display: inline-block; animation: ember-tick .55s cubic-bezier(.22, 1, .36, 1) both; border-radius: 3px; }
+@keyframes ember-tick {
+  0% { opacity: 0; transform: translateY(4px); background: color-mix(in oklab, #d94e28 22%, transparent); }
+  60% { opacity: 1; transform: none; }
+  100% { background: transparent; }
+}
+
+.ember-ping { position: absolute; inset: -1px; border-radius: inherit; border: 1px solid #d94e28; animation: ember-ping 2.4s cubic-bezier(0, 0, .2, 1) infinite; pointer-events: none; }
+@keyframes ember-ping { 0% { transform: scale(1); opacity: .55; } 70%, 100% { transform: scale(1.35, 1.7); opacity: 0; } }
+
+.ember-scan { position: absolute; top: 0; left: 0; right: 0; height: 1px; overflow: hidden; pointer-events: none; }
+.ember-scan::after { content: ""; position: absolute; top: 0; width: 35%; height: 100%; background: linear-gradient(90deg, transparent, #22c55e, transparent); animation: ember-scan 2.8s ease-in-out infinite; }
+@keyframes ember-scan { from { left: -35%; } to { left: 100%; } }
+
+.ember-wind-arrow { flex: none; transition: rotate .8s cubic-bezier(.22, 1, .36, 1); }
+.ember-flow {
+  height: 2px; border-radius: 2px; opacity: .55;
+  background: repeating-linear-gradient(90deg, currentColor 0 6px, transparent 6px 14px) 0 0 / 28px 2px;
+  color: var(--muted-foreground);
+  animation: ember-flow linear infinite;
+}
+@keyframes ember-flow { to { background-position: 28px 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .ember-live-dot::after, .ember-ping, .ember-scan::after, .ember-flow, .ember-tick { animation: none; }
+}
+
+/* Overview cover layout: full-screen map, floating HUD panels, bottom sheet (sheet peek = 76px). */
+.ember-cover { --cover-left: 1rem; --cover-top: 5.25rem; --cover-bottom: calc(76px + 0.75rem); }
+@media (min-width: 768px) {
+  .peer[data-state="expanded"] ~ main .ember-cover { --cover-left: calc(var(--sidebar-width) + 1.5rem); }
+}
+html:has(.ember-cover) { overflow-x: hidden; }
+.ember-cover .ember-map-section { margin: 0; }
+.ember-cover .ember-map-section .ember-map-layout { position: absolute; inset: 0; height: 100%; min-height: 0; margin: 0; border: 0; border-radius: 0; display: block; }
+.ember-cover .ember-map-section .ember-map-canvas { position: absolute; inset: 0; height: 100%; min-height: 0; }
+/* Map overlays clear the top bar, the left HUD and the peeking sheet. */
+.ember-cover .ember-map-tools { top: var(--cover-top); }
+.ember-cover .ember-map-legend { left: var(--cover-left); bottom: var(--cover-bottom); transition: left .3s ease-out; }
+.ember-cover .ember-map-compass { display: none; }
+.ember-cover .ember-fullscreen { display: none; }
+.ember-cover .ember-map-section .ember-incident-panel { top: var(--cover-top); bottom: var(--cover-bottom); transition: transform .3s ease-out, opacity .3s ease-out; }
+.ember-cover .ember-panel-toggle { transition: right .3s ease-out; }
+.ember-topbar-scroll { scrollbar-width: none; }
+.ember-topbar-scroll::-webkit-scrollbar { display: none; }
