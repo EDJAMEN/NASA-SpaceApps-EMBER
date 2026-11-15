@@ -165,7 +165,7 @@ export function spreadFeatures(winds: FireWind[]): FeatureCollection<Polygon | L
   return { type: "FeatureCollection", features };
 }
 
-const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const COMPASS = ["North", "Northeast", "East", "Southeast", "South", "Southwest", "West", "Northwest"];
 export const compassOf = (deg: number) => COMPASS[Math.round((((deg % 360) + 360) % 360) / 45) % 8]!;
 
 /**

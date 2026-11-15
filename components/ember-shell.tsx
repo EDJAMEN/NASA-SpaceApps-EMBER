@@ -315,10 +315,10 @@ const PILL = {
 const FALLBACK: SidebarTelemetry = {
   latest: { name: "45 km S of Malaybalay City", distanceKm: 44.8, date: "Today", time: "04:39 AM", source: "VIIRS", conf: "≥95%", lat: 7.749, lng: 125.12 },
   window: { fused: 1, raw: 1, dual: 0, viirs: 1, modis: 0, bufferKm: 30 },
-  boundary: { place: "Malaybalay", windKmh: 4, from: "N", toward: "S", inside: 0, border: 1, spread: "Normal", region: "Bukidnon", sync: "04:39 AM" },
+  boundary: { place: "Malaybalay", windKmh: 4, from: "North", toward: "South", inside: 0, border: 1, spread: "Normal", region: "Bukidnon", sync: "04:39 AM" },
 };
 
-const COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"];
+const COMPASS = ["North", "Northeast", "East", "Southeast", "South", "Southwest", "West", "Northwest"];
 
 const hemi = (v: number, pos: string, neg: string) => `${Math.abs(v).toFixed(3)}° ${v >= 0 ? pos : neg}`;
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
