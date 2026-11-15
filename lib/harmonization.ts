@@ -82,7 +82,7 @@ export function normalizeConfidenceScore(
 }
 
 /**
- * Ingests GeoJSON Point collection from both sensors, deduplicates points within clusterRadiusKm,
+ * Ingests GeoJSON Point collection from both sensors, groups points within clusterRadiusKm,
  * and fuses into unified fire clusters with boosted confidence.
  */
 export function harmonizeFireGeoJson(
@@ -272,7 +272,7 @@ export function harmonizeFireGeoJson(
 }
 
 /**
- * Harmonizes raw Hotspot array directly into deduplicated clusters.
+ * Harmonizes raw Hotspot array directly into clusters of nearby detections.
  */
 export function harmonizeHotspots(
   hotspots: Hotspot[],

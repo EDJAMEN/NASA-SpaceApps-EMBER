@@ -27,7 +27,7 @@ export interface HarmonizationComparisonStats {
   modisRawCount: number;
   viirsRawCount: number;
   harmonizedClusterCount: number;
-  mergedDuplicateCount: number;
+  groupedDetectionCount: number;
   reductionPercent: number;
   dualSensorConfirmedCount: number;
 }
@@ -269,9 +269,9 @@ export function computeHarmonizationStats(
 
   const rawDetectionCount = Math.max(rawDetections.length, rawPixelCount);
   const harmonizedClusterCount = harmonizedClusters.length;
-  const mergedDuplicateCount = Math.max(0, rawDetectionCount - harmonizedClusterCount);
+  const groupedDetectionCount = Math.max(0, rawDetectionCount - harmonizedClusterCount);
   const reductionPercent =
-    rawDetectionCount > 0 ? Math.round((mergedDuplicateCount / rawDetectionCount) * 100) : 0;
+    rawDetectionCount > 0 ? Math.round((groupedDetectionCount / rawDetectionCount) * 100) : 0;
   const dualSensorConfirmedCount = harmonizedClusters.filter((c) => c.isMultiSensor).length;
 
   return {
@@ -280,7 +280,7 @@ export function computeHarmonizationStats(
     modisRawCount,
     viirsRawCount,
     harmonizedClusterCount,
-    mergedDuplicateCount,
+    groupedDetectionCount,
     reductionPercent,
     dualSensorConfirmedCount,
   };

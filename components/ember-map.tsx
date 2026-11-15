@@ -380,6 +380,8 @@ export function EmberMap({
   const mapRef = useRef<maplibregl.Map | null>(null);
   const focusRef = useRef(focus);
   focusRef.current = focus;
+  const heatRef = useRef(heatPoints);
+  heatRef.current = heatPoints;
   const clickRef = useRef(onMapClick);
   clickRef.current = onMapClick;
   const selectRef = useRef(onSelect);
@@ -446,10 +448,31 @@ export function EmberMap({
       if (hoveredId !== undefined) map.setFeatureState({ source: "ember-boundary", id: hoveredId }, { hover: false });
       hoveredId = undefined;
     };
+    // Heatspot callout: pinned above the heatspot itself (not the pointer), shown on hover or tap.
+    const heatPopup = new maplibregl.Popup({ closeButton: false, closeOnClick: false, anchor: "bottom", offset: 12, className: "ember-heat-popup" });
+    // Heatmap layers can't be hit-tested, so find the nearest glow source point on screen (within 30 px).
+    const heatAt = (pt: { x: number; y: number }) => {
+      let best: { lat: number; lng: number } | null = null, bestD = 30;
+      for (const h of heatRef.current ?? []) {
+        const p = map.project([h.lng, h.lat]);
+        const d = Math.hypot(p.x - pt.x, p.y - pt.y);
+        if (d < bestD) { best = h; bestD = d; }
+      }
+      return best;
+    };
+    const showHeat = (h: { lat: number; lng: number }) => {
+      popup.remove();
+      heatPopup.setLngLat([h.lng, h.lat]).setText("Heat (Not Live)").addTo(map);
+    };
     map.on("mousemove", (e) => {
       const layers = ["ember-landmarks-dot", "ember-spread-arrow", "ember-spread-fill", "ember-areas-fill", "ember-boundary-fill"].filter((id) => map.getLayer(id));
       const top: MapGeoJSONFeature | undefined = map.queryRenderedFeatures(e.point, { layers })[0];
       clearHover();
+      // Heat wins over the big area fills (province/temperature shading cover everything); landmarks and spread stay on top.
+      const specific = top && ["ember-landmarks-dot", "ember-spread-arrow", "ember-spread-fill"].includes(top.layer.id);
+      const heat = specific ? null : heatAt(e.point);
+      if (heat) return showHeat(heat);
+      heatPopup.remove();
       if (!top) return void popup.remove();
       if (top.source === "ember-boundary" && top.id !== undefined) {
         hoveredId = top.id;
@@ -464,9 +487,14 @@ export function EmberMap({
     map.on("mouseout", () => {
       clearHover();
       popup.remove();
+      heatPopup.remove();
     });
     map.on("click", (e) => {
       if ((e.originalEvent.target as HTMLElement | null)?.closest(".maplibregl-marker")) return; // marker clicks select incidents
+      // Touch screens have no hover: a tap on a heatspot shows its callout instead of picking a point.
+      const heat = heatAt(e.point);
+      if (heat) return showHeat(heat);
+      heatPopup.remove();
       const { lat, lng } = e.lngLat.wrap(); // normalize wrapped world copies
       clickRef.current?.(lat, lng);
     });

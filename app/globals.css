@@ -1098,3 +1098,7 @@ html:has(.ember-landing-page) { scroll-behavior: smooth; }
   .ember-landing-map-parallax,
   .ember-landing-page-grid { animation: none !important; transition: none !important; }
 }
+
+/* Heatspot callout ("Heat (Not Live)"): dark rounded label pinned above the spot, salmon-red text. */
+.ember-heat-popup .maplibregl-popup-content { padding: 5px 11px; border: 1px solid rgb(255 255 255 / 12%); border-radius: 7px; background: #1f2228; color: #ff7b6e; font: 700 13px/1.2 var(--font-sans, sans-serif); letter-spacing: 0.01em; box-shadow: 0 4px 14px rgb(0 0 0 / 45%); pointer-events: none; }
+.ember-heat-popup .maplibregl-popup-tip { border-top-color: #1f2228; }
