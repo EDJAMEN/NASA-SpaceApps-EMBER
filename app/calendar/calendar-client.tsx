@@ -188,7 +188,7 @@ export function CalendarPage() {
             <span /> SEASONALITY
           </div>
           <h1>
-            Burning calendar<span>.</span>
+            Fire/Hotspots Calendar<span>.</span>
           </h1>
           <p>Real fire records from NASA satellites for any place. Pick a day or a few dates to see what happened, in plain words.</p>
         </div>

@@ -160,6 +160,48 @@ export function DetectionsPage() {
         <StatCard label="Peak brightness" value={stats.maxTemp ? `${stats.maxTemp.toFixed(1)} K` : "—"} hint="Hottest pixel shown" />
       </section>
 
+      <Card className="mt-4">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">What this page is for</CardTitle>
+          <CardDescription>
+            A single list of every heat spot NASA&apos;s MODIS and VIIRS satellites picked up in the area, so you can check
+            which ones may be real fires, which are near people, and export them for reports or field teams.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <dl className="grid gap-3 text-sm sm:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <dt className="font-medium">Detections</dt>
+              <dd className="text-muted-foreground">
+                How many heat spots match your filters. Each one is a satellite pixel that was much hotter than its
+                surroundings. VIIRS sees 375 m pixels, MODIS 1 km.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">High confidence</dt>
+              <dd className="text-muted-foreground">
+                Heat spots the satellite is most sure are real fires, not sun glare or a hot roof. Both sensors&apos;
+                ratings are converted to the same low / medium / high scale.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">Within {THREAT_KM} km of a settlement</dt>
+              <dd className="text-muted-foreground">
+                Heat spots close enough to a town or barangay to threaten homes. When this is above zero, notify the
+                DRRMC.
+              </dd>
+            </div>
+            <div>
+              <dt className="font-medium">Peak brightness</dt>
+              <dd className="text-muted-foreground">
+                The temperature of the hottest pixel shown, in kelvin (K). Higher usually means a more intense or larger
+                fire. 330 K is about 57 °C at the pixel scale.
+              </dd>
+            </div>
+          </dl>
+        </CardContent>
+      </Card>
+
       <Card className="mt-6">
         <CardHeader className="gap-4 space-y-0 pb-4 lg:flex-row lg:items-center">
           <div className="mr-auto">

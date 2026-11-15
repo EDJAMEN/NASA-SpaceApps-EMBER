@@ -53,7 +53,7 @@ const NAV: Array<{ key: EmberNavKey; to: string; label: string; icon: typeof Fla
   { key: "overview", to: "/dashboard", label: "Overview", icon: LayoutGrid },
   { key: "detections", to: "/detections", label: "Detections", icon: Radio },
   { key: "alerts", to: "/alerts", label: "Alerts", icon: TriangleAlert },
-  { key: "calendar", to: "/calendar", label: "Burn calendar", icon: CalendarDays },
+  { key: "calendar", to: "/calendar", label: "Fire/Hotspots Calendar", icon: CalendarDays },
   { key: "ingestion", to: "/ingestion", label: "Ingestion", icon: Flame },
 ];
 
