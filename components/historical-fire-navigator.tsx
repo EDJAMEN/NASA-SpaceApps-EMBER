@@ -144,22 +144,6 @@ export function HistoricalFireNavigator({
             </PopoverContent>
           </Popover>
           <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
-            <ToggleGroup
-              type="single"
-              value={granularity}
-              onValueChange={(v) => {
-                if (v === "daily" || v === "subdaily") onChangeGranularity(v);
-              }}
-              aria-label="Timeline granularity"
-              className="rounded-lg border p-0.5"
-            >
-              <ToggleGroupItem value="daily" title="Step in 24-hour daily increments" aria-label="Daily" className="h-7 px-2 text-[11px]">
-                Daily
-              </ToggleGroupItem>
-              <ToggleGroupItem value="subdaily" title="Step in 3-hour satellite overpass increments (syncs with wind spread cone)" aria-label="Sub-daily" className="h-7 px-2 text-[11px]">
-                Sub-daily
-              </ToggleGroupItem>
-            </ToggleGroup>
             <Popover open={dateOpen} onOpenChange={setDateOpen}>
               <PopoverTrigger asChild>
                 <Button
