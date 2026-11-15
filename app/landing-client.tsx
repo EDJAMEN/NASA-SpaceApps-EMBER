@@ -5,7 +5,6 @@ import dynamic from "next/dynamic";
 import Image from "next/image";
 import Link from "next/link";
 import {
-  Flame,
   Layers,
   Wind,
   Clock,
@@ -154,9 +153,7 @@ export function LandingPage() {
               }}
               className="flex items-center gap-2.5 text-[#F8FAFC] transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f97316]"
             >
-              <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#f97316]/60 bg-[#f97316]/15 text-[#FB923C] shadow-[0_0_18px_rgba(249,115,22,0.35)]">
-                <Flame className="h-4 w-4 fill-current" strokeWidth={2.2} />
-              </span>
+              <Image src="/ember-darkmode.svg" alt="" width={32} height={32} unoptimized priority className="h-8 w-8" />
               <span className="text-lg font-bold tracking-tight">EMBER.</span>
             </Link>
             <span
@@ -168,47 +165,6 @@ export function LandingPage() {
             </span>
           </div>
 
-          {/* Center/Right Navigation Links */}
-          <nav
-            aria-label="Primary"
-            className="hidden md:flex items-center gap-7 font-mono text-[11px] font-medium tracking-[0.18em] text-slate-300"
-          >
-            <button
-              type="button"
-              onClick={() => scrollToStage(0)}
-              className={`transition-colors hover:text-[#F8FAFC] cursor-pointer ${
-                scrollProgress < 0.28 ? "text-orange-400" : ""
-              }`}
-            >
-              CAPABILITIES
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToStage(0.45)}
-              className={`transition-colors hover:text-[#F8FAFC] cursor-pointer ${
-                scrollProgress >= 0.28 && scrollProgress < 0.65
-                  ? "text-orange-400"
-                  : ""
-              }`}
-            >
-              HARMONIZATION
-            </button>
-            <button
-              type="button"
-              onClick={() => scrollToStage(0.88)}
-              className={`transition-colors hover:text-[#F8FAFC] cursor-pointer ${
-                scrollProgress >= 0.65 ? "text-orange-400" : ""
-              }`}
-            >
-              HOW IT WORKS
-            </button>
-            <Link
-              href="/detections"
-              className="transition-colors hover:text-[#F8FAFC]"
-            >
-              TELEMETRY
-            </Link>
-          </nav>
 
           {/* Primary CTA: Open dashboard -> */}
           <div className="flex items-center gap-3">
@@ -246,11 +202,10 @@ export function LandingPage() {
           >
             {/* Upper-Left Typography + Circular Spec Badges */}
             <div className="max-w-xl pointer-events-auto">
-              <div className="inline-flex items-center gap-2 rounded-full border border-orange-400/35 bg-[#090D16]/85 px-3.5 py-1 font-mono text-[10px] font-semibold uppercase tracking-[0.16em] text-orange-400 backdrop-blur-xl shadow-lg">
-                <span>
-                  • EMBER — EMERGENCY MONITORING &amp; BURN-ZONE EARLY RESPONSE
-                </span>
-              </div>
+              <p className="flex items-center gap-2 text-xs font-medium tracking-wide text-slate-300">
+                <span className="h-px w-6 bg-[#f97316]" aria-hidden="true" />
+                Wildfire intelligence for response teams
+              </p>
 
               <h1 className="mt-5 tracking-tight drop-shadow-[0_2px_16px_rgba(0,0,0,0.85)]">
                 <span className="block font-light italic text-2xl sm:text-3xl text-slate-200">
@@ -630,9 +585,7 @@ export function LandingPage() {
             {/* 1. Brand Column (md:col-span-5) */}
             <div className="md:col-span-5">
               <div className="flex items-center gap-2.5">
-                <span className="flex h-8 w-8 items-center justify-center rounded-full border border-[#f97316]/60 bg-[#f97316]/15 text-[#FB923C]">
-                  <Flame className="h-4 w-4 fill-current" strokeWidth={2.2} />
-                </span>
+                <Image src="/ember-darkmode.svg" alt="" width={32} height={32} unoptimized className="h-8 w-8" />
                 <span className="text-lg font-bold tracking-tight text-[#F8FAFC]">
                   EMBER.
                 </span>

@@ -6,6 +6,12 @@ export const metadata: Metadata = {
   title: "EMBER | Wildfire Early Response",
   description:
     "Emergency Monitoring & Burn-zone Early Response — live thermal anomaly monitoring and early response dashboard for Bukidnon, Mindanao.",
+  icons: {
+    icon: [
+      { url: "/ember-lightmode.svg", type: "image/svg+xml", media: "(prefers-color-scheme: light)" },
+      { url: "/ember-darkmode.svg", type: "image/svg+xml", media: "(prefers-color-scheme: dark)" },
+    ],
+  },
   openGraph: {
     title: "EMBER | Wildfire Early Response",
     description:

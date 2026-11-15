@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { type ReactNode, useEffect } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
@@ -128,9 +129,14 @@ export function EmberShell({
             <SidebarMenuItem>
               <SidebarMenuButton size="lg" asChild>
                 <Link href="/" aria-label="EMBER home">
-                  <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                    <Flame size={18} strokeWidth={2.4} />
-                  </span>
+                  <Image
+                    src={dark ? "/ember-darkmode.svg" : "/ember-lightmode.svg"}
+                    alt=""
+                    width={32}
+                    height={32}
+                    unoptimized
+                    className="size-8 shrink-0"
+                  />
                   <span className="grid flex-1 text-left leading-tight">
                     <span className="font-semibold">EMBER.</span>
                     <span className="text-xs text-muted-foreground">Wildfire response</span>

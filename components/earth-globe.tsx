@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Stars } from "@react-three/drei";
+import { Stars, useTexture } from "@react-three/drei";
 import * as THREE from "three";
 
 const EARTH_VERTEX_SHADER = /* glsl */ `
@@ -22,115 +22,84 @@ const EARTH_VERTEX_SHADER = /* glsl */ `
 `;
 
 const EARTH_FRAGMENT_SHADER = /* glsl */ `
+  uniform sampler2D uDay;     // NASA Blue Marble surface
+  uniform sampler2D uNight;   // NASA Black Marble city lights
+  uniform sampler2D uClouds;  // cloud cover
+  uniform sampler2D uSpec;    // ocean mask (water = bright)
   uniform float uTime;
   uniform float uStage1Weight;
   varying vec2 vUv;
   varying vec3 vNormalWorld;
   varying vec3 vPositionWorld;
-  varying vec3 vObjectPos;
-
-  float hash(vec3 p) {
-    p = fract(p * 0.3183099 + 0.1);
-    p *= 17.0;
-    return fract(p.x * p.y * p.z * (p.x + p.y + p.z));
-  }
-
-  float noise(vec3 x) {
-    vec3 i = floor(x);
-    vec3 f = fract(x);
-    f = f * f * (3.0 - 2.0 * f);
-    return mix(
-      mix(
-        mix(hash(i + vec3(0, 0, 0)), hash(i + vec3(1, 0, 0)), f.x),
-        mix(hash(i + vec3(0, 1, 0)), hash(i + vec3(1, 1, 0)), f.x),
-        f.y
-      ),
-      mix(
-        mix(hash(i + vec3(0, 0, 1)), hash(i + vec3(1, 0, 1)), f.x),
-        mix(hash(i + vec3(0, 1, 1)), hash(i + vec3(1, 1, 1)), f.x),
-        f.y
-      ),
-      f.z
-    );
-  }
-
-  float fbm(vec3 p) {
-    float v = 0.0;
-    float a = 0.5;
-    for (int i = 0; i < 4; i++) {
-      v += a * noise(p);
-      p = p * 2.05 + vec3(13.7, 29.3, 7.1);
-      a *= 0.5;
-    }
-    return v;
-  }
-
-  float fbmFast(vec3 p) {
-    return 0.55 * noise(p) + 0.30 * noise(p * 2.07 + vec3(5.2, 11.4, 3.8)) + 0.15 * noise(p * 4.15);
-  }
 
   void main() {
     vec3 N = normalize(vNormalWorld);
     vec3 V = normalize(cameraPosition - vPositionWorld);
     vec3 sunDir = normalize(vec3(-1.15, 0.42, 0.72));
-
-    // Procedural continents & bathymetry
-    float n = fbm(vObjectPos * 3.1 + vec3(1.4, -0.6, 2.1));
-    float detail = noise(vObjectPos * 12.0);
-    float elevation = n + detail * 0.14;
-    float landMask = smoothstep(0.49, 0.53, elevation);
-    float coastEdge = smoothstep(0.475, 0.505, elevation) - smoothstep(0.505, 0.54, elevation);
-
-    // Subtle drifting cloud deck
-    float cloudNoise = fbmFast(vObjectPos * 5.2 + vec3(uTime * 0.012, -uTime * 0.006, 1.2));
-    float clouds = smoothstep(0.54, 0.72, cloudNoise) * 0.26;
-
-    // Day / night terminator (lit western face, shadowed night hemisphere)
     float ndl = dot(N, sunDir);
-    float dayFactor = smoothstep(-0.18, 0.26, ndl);
-    float twilightFactor = smoothstep(-0.28, 0.06, ndl) * (1.0 - smoothstep(0.06, 0.34, ndl));
+    float dayFactor = smoothstep(-0.10, 0.22, ndl);
+    float twilight = smoothstep(-0.22, 0.0, ndl) * (1.0 - smoothstep(0.0, 0.28, ndl));
 
-    // Day colors
-    vec3 deepOcean = vec3(0.022, 0.068, 0.155);
-    vec3 shallowOcean = vec3(0.045, 0.148, 0.285);
-    vec3 oceanDay = mix(deepOcean, shallowOcean, smoothstep(0.32, 0.50, elevation));
-    vec3 landLow = vec3(0.072, 0.132, 0.108);
-    vec3 landHigh = vec3(0.165, 0.152, 0.13);
-    vec3 landDay = mix(landLow, landHigh, smoothstep(0.52, 0.78, elevation));
-    vec3 daySurface = mix(oceanDay, landDay, landMask) * (0.28 + 0.72 * max(ndl, 0.0));
+    // Day side: real surface, gently contrast-lifted, lit by the sun.
+    vec3 surface = pow(texture2D(uDay, vUv).rgb, vec3(1.12)) * 1.22;
+    vec3 day = surface * (0.05 + 1.08 * max(ndl, 0.0));
 
-    // Night colors
-    vec3 oceanNight = vec3(0.007, 0.013, 0.026);
-    vec3 landNight = vec3(0.021, 0.031, 0.052) + coastEdge * vec3(0.035, 0.058, 0.09);
-    vec3 nightSurface = mix(oceanNight, landNight, landMask);
+    // Clouds drift slowly east and cast a faint shadow on the ground below them.
+    vec2 cloudUv = vUv + vec2(uTime * 0.0008, 0.0);
+    float cloud = texture2D(uClouds, cloudUv).a; // this map stores cloud density in alpha (RGB is plain white)
+    float cloudShadow = texture2D(uClouds, cloudUv + vec2(0.0025, 0.0012)).a;
+    day *= 1.0 - cloudShadow * 0.32 * dayFactor;
+    vec3 cloudColor = vec3(1.0, 0.99, 0.97) * cloud * (0.03 + 0.97 * max(ndl, 0.0));
 
-    // Ocean specular glint
+    // Night side: warm sodium-vapour city lights, dimmed under cloud.
+    vec3 lights = texture2D(uNight, vUv).rgb;
+    vec3 night = lights * vec3(1.0, 0.70, 0.38) * 1.8 * (1.0 - dayFactor) * (1.0 - cloud * 0.75);
+
+    // Sun glint on open ocean only.
+    float ocean = texture2D(uSpec, vUv).r;
     vec3 H = normalize(sunDir + V);
-    float spec = pow(max(dot(N, H), 0.0), 58.0) * (1.0 - landMask) * smoothstep(-0.05, 0.3, ndl);
-    vec3 specularColor = vec3(0.38, 0.65, 0.98) * spec * 0.48;
+    float glint = pow(max(dot(N, H), 0.0), 80.0) * ocean * (1.0 - cloud) * dayFactor;
+    vec3 specular = vec3(1.0, 0.93, 0.80) * glint * 0.85;
 
-    // Glowing orange thermal hotspot clusters on the night/twilight hemisphere
-    float clusterField = fbmFast(vObjectPos * 9.5 + vec3(4.2, -1.7, 3.3));
-    float fineSparks = noise(vObjectPos * 28.0 - vec3(0.0, uTime * 0.04, 0.0));
-    float pulse = 0.85 + 0.15 * sin(uTime * 2.2 + vObjectPos.x * 15.0 + vObjectPos.y * 11.0);
-    float nightWeight = smoothstep(0.24, -0.22, ndl);
-    float hotspotCore = smoothstep(0.59, 0.74, clusterField) * smoothstep(0.53, 0.71, fineSparks);
-    float hotspotHalo = smoothstep(0.53, 0.69, clusterField) * 0.34;
-    float hotspotIntensity = (hotspotCore * 2.25 + hotspotHalo) * landMask * (0.35 + 0.65 * nightWeight) * pulse;
-    vec3 hotspotGlow = mix(vec3(0.976, 0.451, 0.086), vec3(1.0, 0.85, 0.46), hotspotCore) * hotspotIntensity;
+    // Atmosphere: blue Rayleigh haze toward the limb, amber along the day/night line.
+    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 2.6);
+    vec3 haze = mix(vec3(0.30, 0.58, 1.0), vec3(1.0, 0.52, 0.22), twilight * 0.7);
+    float hazeStrength = mix(0.55, 0.95, uStage1Weight) * (0.15 + 0.85 * smoothstep(-0.35, 0.35, ndl));
 
-    // Vivid Rayleigh blue atmospheric limb glow on the surface curvature (stronger in Stage 1 Macro Horizon)
-    float fresnel = pow(1.0 - max(dot(N, V), 0.0), 3.4);
-    vec3 rayleighBlue = vec3(0.18, 0.54, 1.0);
-    vec3 terminatorAmber = vec3(0.976, 0.451, 0.086);
-    vec3 limbTint = mix(rayleighBlue, terminatorAmber, twilightFactor * 0.45);
-    float limbStrength = mix(0.32, 0.68, uStage1Weight);
-
-    vec3 cloudLayer = vec3(0.75, 0.86, 1.0) * clouds * (0.25 + 0.75 * dayFactor);
-    vec3 finalColor = mix(nightSurface, daySurface, dayFactor) + cloudLayer + specularColor + hotspotGlow + limbTint * fresnel * limbStrength;
-    gl_FragColor = vec4(finalColor, 1.0);
+    vec3 color = day + cloudColor + night + specular
+      + vec3(1.0, 0.42, 0.14) * twilight * 0.10
+      + haze * fresnel * hazeStrength;
+    gl_FragColor = vec4(color, 1.0);
   }
 `;
+
+// Outer atmosphere shell (rendered from inside, additive): the soft blue glow beyond the planet's edge.
+const ATMOSPHERE_VERTEX_SHADER = /* glsl */ `
+  varying vec3 vNormalView;
+  varying vec3 vNormalWorld;
+  void main() {
+    vNormalView = normalize(normalMatrix * normal);
+    vNormalWorld = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const ATMOSPHERE_FRAGMENT_SHADER = /* glsl */ `
+  varying vec3 vNormalView;
+  varying vec3 vNormalWorld;
+  void main() {
+    float rim = pow(clamp(0.78 + dot(vNormalView, vec3(0.0, 0.0, 1.0)), 0.0, 1.0), 4.5);
+    float sunlit = 0.35 + 0.65 * smoothstep(-0.4, 0.5, dot(vNormalWorld, normalize(vec3(-1.15, 0.42, 0.72))));
+    gl_FragColor = vec4(vec3(0.32, 0.62, 1.0) * rim * sunlit * 1.35, 1.0);
+  }
+`;
+
+/** Lat/lng (degrees) → point on a three.js SphereGeometry, matching how its UVs wrap an equirectangular map. */
+function latLngToVector(lat: number, lng: number, radius: number): THREE.Vector3 {
+  const phi = THREE.MathUtils.degToRad(lng + 180);
+  const la = THREE.MathUtils.degToRad(lat);
+  return new THREE.Vector3(-Math.cos(phi) * Math.cos(la) * radius, Math.sin(la) * radius, Math.sin(phi) * Math.cos(la) * radius);
+}
 
 function createOrbitLoopGeometry(radius: number, segments = 200): THREE.BufferGeometry {
   const points: THREE.Vector3[] = [];
@@ -142,16 +111,17 @@ function createOrbitLoopGeometry(radius: number, segments = 200): THREE.BufferGe
 }
 
 function createHotspotPointsGeometry(radius: number): THREE.BufferGeometry {
-  // Concentrated in SE Asia / Philippines / Mindanao / Kalimantan + global fire belts
+  // Real fire belts (lat, lng, points): concentrated on SE Asia / Mindanao, plus the big global burn regions.
   const clusterSeeds: Array<[number, number, number]> = [
-    [0.14, 2.18, 22], // Bukidnon / Mindanao / Philippines
-    [0.24, 2.11, 14], // Luzon / Mindoro
-    [-0.03, 2.02, 16], // Borneo / Kalimantan
-    [-0.11, 1.85, 14], // Sumatra / Java
-    [0.29, 1.76, 12], // Mainland SE Asia
-    [-0.32, 2.32, 14], // Northern Australia
-    [-0.18, 0.42, 12], // Central Africa
-    [-0.24, -0.95, 12], // Amazon Basin
+    [8.0, 125.1, 22], // Bukidnon / Mindanao
+    [16.0, 121.0, 14], // Luzon
+    [-1.0, 114.0, 16], // Borneo / Kalimantan
+    [-1.5, 103.0, 14], // Sumatra
+    [18.0, 100.0, 14], // Mainland SE Asia
+    [-15.0, 132.0, 14], // Northern Australia
+    [-6.0, 22.0, 14], // Central Africa
+    [-9.0, -60.0, 14], // Amazon basin
+    [37.0, -120.0, 8], // California
   ];
 
   const positions: number[] = [];
@@ -161,15 +131,10 @@ function createHotspotPointsGeometry(radius: number): THREE.BufferGeometry {
     return seed / 4294967296;
   };
 
-  for (const [baseLat, baseLon, count] of clusterSeeds) {
+  for (const [lat, lng, count] of clusterSeeds) {
     for (let i = 0; i < count; i++) {
-      const lat = baseLat + (nextRand() - 0.5) * 0.18;
-      const lon = baseLon + (nextRand() - 0.5) * 0.22;
-      const r = radius * (1.003 + nextRand() * 0.004);
-      const x = r * Math.cos(lat) * Math.cos(lon);
-      const y = r * Math.sin(lat);
-      const z = r * Math.cos(lat) * Math.sin(lon);
-      positions.push(x, y, z);
+      const v = latLngToVector(lat + (nextRand() - 0.5) * 7, lng + (nextRand() - 0.5) * 9, radius * (1.003 + nextRand() * 0.003));
+      positions.push(v.x, v.y, v.z);
     }
   }
 
@@ -178,6 +143,7 @@ function createHotspotPointsGeometry(radius: number): THREE.BufferGeometry {
   return geometry;
 }
 
+/** A small Earth-observation satellite (Terra/Aqua/NOAA-20 style): foil body, two solar wings, nadir antenna. */
 function OrbitalMarkerNode({
   satelliteRef,
   accentColor,
@@ -185,22 +151,51 @@ function OrbitalMarkerNode({
   satelliteRef: React.RefObject<THREE.Group | null>;
   accentColor: string;
 }) {
+  const blinkRef = useRef<THREE.MeshBasicMaterial>(null);
+  useFrame(({ clock }) => {
+    if (blinkRef.current) blinkRef.current.opacity = clock.getElapsedTime() % 1.6 < 0.12 ? 1 : 0.15;
+  });
   return (
-    <group ref={satelliteRef}>
-      {/* Sleek pinpoint orbital telemetry node + soft atmospheric halo */}
+    // lookAt(earth) points +z at the planet: the antenna dish faces down, the wings span the x axis.
+    <group ref={satelliteRef} scale={0.62}>
+      {/* Bus wrapped in gold multi-layer insulation */}
       <mesh>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshBasicMaterial color={accentColor} />
+        <boxGeometry args={[0.05, 0.042, 0.064]} />
+        <meshStandardMaterial color="#c99a2e" metalness={0.85} roughness={0.32} emissive="#3a2600" emissiveIntensity={0.25} />
       </mesh>
-      <mesh>
-        <sphereGeometry args={[0.036, 16, 16]} />
-        <meshBasicMaterial
-          color={accentColor}
-          transparent
-          opacity={0.28}
-          depthWrite={false}
-          blending={THREE.AdditiveBlending}
-        />
+      {/* Instrument deck */}
+      <mesh position={[0, 0, 0.036]}>
+        <boxGeometry args={[0.034, 0.03, 0.008]} />
+        <meshStandardMaterial color="#d7dbe0" metalness={0.6} roughness={0.4} />
+      </mesh>
+      {/* Nadir antenna dish */}
+      <mesh position={[0, 0.002, 0.046]} rotation={[-Math.PI / 2, 0, 0]}>
+        <coneGeometry args={[0.014, 0.01, 20, 1, true]} />
+        <meshStandardMaterial color="#f1f3f5" metalness={0.3} roughness={0.5} side={THREE.DoubleSide} />
+      </mesh>
+      {/* Solar wings: boom + panel with cell grid sheen */}
+      {[-1, 1].map((side) => (
+        <group key={side} position={[side * 0.025, 0, 0]}>
+          <mesh position={[side * 0.016, 0, 0]}>
+            <boxGeometry args={[0.032, 0.003, 0.003]} />
+            <meshStandardMaterial color="#9aa3ad" metalness={0.8} roughness={0.3} />
+          </mesh>
+          <mesh position={[side * 0.085, 0, 0]}>
+            <boxGeometry args={[0.11, 0.0025, 0.046]} />
+            <meshStandardMaterial color="#173a7a" metalness={0.55} roughness={0.22} emissive="#0b1f4a" emissiveIntensity={0.35} />
+          </mesh>
+          {[-0.03, 0, 0.03].map((x) => (
+            <mesh key={x} position={[side * 0.085 + x, 0.0016, 0]}>
+              <boxGeometry args={[0.0012, 0.0004, 0.046]} />
+              <meshBasicMaterial color="#5f86c9" />
+            </mesh>
+          ))}
+        </group>
+      ))}
+      {/* Navigation light in the mission colour */}
+      <mesh position={[0, 0.024, 0]}>
+        <sphereGeometry args={[0.005, 10, 10]} />
+        <meshBasicMaterial ref={blinkRef} color={accentColor} transparent opacity={0.9} blending={THREE.AdditiveBlending} depthWrite={false} />
       </mesh>
     </group>
   );
@@ -212,6 +207,12 @@ function smoothstep(edge0: number, edge1: number, x: number): number {
 }
 
 function EarthScene() {
+  const [dayMap, nightMap, cloudMap, specMap] = useTexture([
+    "/textures/earth/earth_atmos_2048.jpg",
+    "/textures/earth/earth_lights_2048.png",
+    "/textures/earth/earth_clouds_1024.png",
+    "/textures/earth/earth_specular_2048.jpg",
+  ]);
   const groupRef = useRef<THREE.Group>(null);
   const earthRef = useRef<THREE.Mesh>(null);
   const modisSatRef = useRef<THREE.Group>(null);
@@ -237,9 +238,34 @@ function EarthScene() {
         vertexShader: EARTH_VERTEX_SHADER,
         fragmentShader: EARTH_FRAGMENT_SHADER,
         uniforms: {
+          uDay: { value: dayMap },
+          uNight: { value: nightMap },
+          uClouds: { value: cloudMap },
+          uSpec: { value: specMap },
           uTime: { value: 0 },
           uStage1Weight: { value: 1 },
         },
+      }),
+    [dayMap, nightMap, cloudMap, specMap]
+  );
+  useEffect(() => {
+    for (const t of [dayMap, nightMap, cloudMap, specMap]) {
+      t.anisotropy = 8; // crisp coastlines at grazing angles near the limb
+      t.needsUpdate = true;
+    }
+    cloudMap.wrapS = THREE.RepeatWrapping; // drifting clouds wrap round the globe instead of smearing at the seam
+  }, [dayMap, nightMap, cloudMap, specMap]);
+
+  const atmosphereGeom = useMemo(() => new THREE.SphereGeometry(1.68 * 1.075, 96, 96), []);
+  const atmosphereMat = useMemo(
+    () =>
+      new THREE.ShaderMaterial({
+        vertexShader: ATMOSPHERE_VERTEX_SHADER,
+        fragmentShader: ATMOSPHERE_FRAGMENT_SHADER,
+        side: THREE.BackSide,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
       }),
     []
   );
@@ -285,6 +311,8 @@ function EarthScene() {
     return () => {
       earthGeom.dispose();
       earthMat.dispose();
+      atmosphereGeom.dispose();
+      atmosphereMat.dispose();
       hotspotPointsGeom.dispose();
       hotspotPointsMat.dispose();
       modisOrbitLine.geometry.dispose();
@@ -295,6 +323,8 @@ function EarthScene() {
   }, [
     earthGeom,
     earthMat,
+    atmosphereGeom,
+    atmosphereMat,
     hotspotPointsGeom,
     hotspotPointsMat,
     modisOrbitLine,
@@ -371,7 +401,8 @@ function EarthScene() {
     // Axial rotation: slow spin in Stage 1 & 2, locking onto SE Asia / Mindanao in Stage 3
     if (earthRef.current) {
       const freeRotationY = idleSpin + s * Math.PI * 1.25;
-      const lockedSeAsiaRotationY = -0.62;
+      // Turns lng 125°E (Mindanao) to face the camera: see latLngToVector's mapping.
+      const lockedSeAsiaRotationY = THREE.MathUtils.degToRad(145);
       earthRef.current.rotation.y = THREE.MathUtils.lerp(
         freeRotationY,
         lockedSeAsiaRotationY,
@@ -379,7 +410,7 @@ function EarthScene() {
       );
       earthRef.current.rotation.x = THREE.MathUtils.lerp(
         0.22 - t12 * 0.08,
-        0.14,
+        THREE.MathUtils.degToRad(8), // tilt Mindanao (8°N) to the centre
         t23
       );
     }
@@ -430,6 +461,7 @@ function EarthScene() {
         <mesh ref={earthRef} geometry={earthGeom} material={earthMat}>
           <points geometry={hotspotPointsGeom} material={hotspotPointsMat} />
         </mesh>
+        <mesh geometry={atmosphereGeom} material={atmosphereMat} />
 
         <group rotation={[1.28, 0.42, 0.24]}>
           <primitive object={modisOrbitLine} />
@@ -506,7 +538,10 @@ export function EarthGlobeCanvas({
         dpr={[1, 2]}
         gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
       >
-        <EarthScene />
+        {/* Textures stream in; until then only the starfield backdrop shows. */}
+        <Suspense fallback={null}>
+          <EarthScene />
+        </Suspense>
       </Canvas>
     </div>
   );
