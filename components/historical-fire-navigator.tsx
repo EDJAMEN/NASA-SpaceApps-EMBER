@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Calendar, History, Info, Pause, Play, Radio, RotateCcw } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronDown, History, Info, Pause, Play, Radio, RotateCcw } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatShortDate } from "@/lib/historical-fires";
@@ -83,6 +84,10 @@ export function HistoricalFireNavigator({
   onTogglePlay,
 }: HistoricalFireNavigatorProps) {
   const [infoOpen, setInfoOpen] = useState(false);
+  const [dateOpen, setDateOpen] = useState(false);
+  const minHistoryDate = parseISO("2000-11-01");
+  const maxHistoryDate = parseISO(todayStr);
+  const selectedDate = parseISO(historicalDate ?? todayStr);
 
   const safeMax = Math.max(0, steps.length - 1);
   const clampedIdx = Math.max(0, Math.min(safeMax, scrubIndex));
@@ -99,10 +104,10 @@ export function HistoricalFireNavigator({
   }
 
   return (
-    <Card role="region" aria-label="Historical Fire Map Navigator" className="overflow-hidden">
-      <CardContent className="space-y-3 p-3">
+    <Card role="region" aria-label="Historical Fire Map Navigator" className="w-full min-w-0 overflow-hidden">
+      <CardContent className="min-w-0 space-y-3 p-3">
         {/* Top control strip */}
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <Badge variant={isHistorical ? "default" : "secondary"} className="gap-1.5">
             <span className="relative flex size-1.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
@@ -138,7 +143,7 @@ export function HistoricalFireNavigator({
               </p>
             </PopoverContent>
           </Popover>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
             <ToggleGroup
               type="single"
               value={granularity}
@@ -155,26 +160,47 @@ export function HistoricalFireNavigator({
                 Sub-daily
               </ToggleGroupItem>
             </ToggleGroup>
-            <div className="relative" title="Pick historical date (2000-11-01 to present)">
-              <Calendar size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="date"
-                min="2000-11-01"
-                max={todayStr}
-                value={historicalDate ?? todayStr}
-                aria-label="Historical fire map date"
-                onChange={(e) => {
-                  if (e.target.value) onSelectHistoricalDate(e.target.value);
-                }}
-                className="h-7 w-[132px] pl-7 font-mono text-[11px]"
-              />
-            </div>
+            <Popover open={dateOpen} onOpenChange={setDateOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  aria-label={`Select historical date. Current selection ${format(selectedDate, "MMMM d, yyyy")}`}
+                  className="h-8 w-[158px] justify-start gap-2 border-border bg-card px-2.5 font-mono text-[11px] tabular-nums shadow-none hover:bg-accent"
+                >
+                  <CalendarIcon size={14} className="shrink-0 text-primary" />
+                  <span className="flex-1 text-left">{format(selectedDate, "MMM d, yyyy")}</span>
+                  <ChevronDown size={13} className="shrink-0 text-muted-foreground" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" side="bottom" className="w-auto overflow-hidden rounded-xl p-0 shadow-xl">
+                <div className="border-b px-3.5 py-3">
+                  <p className="font-mono text-[9px] font-semibold tracking-[0.14em] text-primary">FIRE RECORD DATE</p>
+                  <p className="mt-1 text-sm font-semibold">{format(selectedDate, "MMMM d, yyyy")}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">Archive available from Nov 1, 2000</p>
+                </div>
+                <Calendar
+                  mode="single"
+                  selected={selectedDate}
+                  onSelect={(date) => {
+                    if (!date) return;
+                    onSelectHistoricalDate(format(date, "yyyy-MM-dd"));
+                    setDateOpen(false);
+                  }}
+                  disabled={{ before: minHistoryDate, after: maxHistoryDate }}
+                  startMonth={minHistoryDate}
+                  endMonth={maxHistoryDate}
+                  captionLayout="dropdown"
+                  className="mx-auto"
+                />
+              </PopoverContent>
+            </Popover>
             <Select value={String(spanDays)} onValueChange={(v) => onChangeSpanDays(Number(v) as SpanDays)}>
-              <SelectTrigger aria-label="Time window span" title="Time window span" className="h-7 w-[104px] text-[11px]">
+              <SelectTrigger aria-label="Time window span" title="Time window span" className="h-7 w-[104px] min-w-[104px] shrink-0 text-[11px]">
                 <History size={12} className="text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent align="end" side="bottom" sideOffset={4} className="w-[104px] min-w-[104px]">
                 {SPAN_OPTIONS.map((opt) => (
                   <SelectItem key={opt.days} value={String(opt.days)}>
                     {opt.label}

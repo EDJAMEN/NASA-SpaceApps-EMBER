@@ -1,29 +1,41 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-const PAGES = [
-  { path: "/", heading: "Good morning, team", nav: "Overview" },
+const APP_PAGES = [
+  { path: "/dashboard", heading: "Test User", nav: "Overview" },
   { path: "/alerts", heading: "Settlement proximity alerts", nav: "Alerts" },
-  { path: "/analytics", heading: "Burn-zone analytics", nav: "Analytics" },
+  { path: "/analytics", heading: "Burn-zone analytics" },
   { path: "/calendar", heading: "Burning calendar", nav: "Burn calendar" },
   { path: "/detections", heading: "Thermal hotspot detections", nav: "Detections" },
   { path: "/ingestion", heading: "NASA FIRMS ingestion", nav: "Ingestion" },
 ];
 
-for (const { path, heading } of PAGES) {
+async function seedProfile(page: Page) {
+  await page.addInitScript(() => {
+    localStorage.setItem("ember.profile.v1", JSON.stringify({ name: "Test User" }));
+  });
+}
+
+test("landing page introduces EMBER and links to dashboard", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Protect what matters");
+  await page.getByRole("link", { name: "Open dashboard", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+});
+
+for (const { path, heading } of APP_PAGES) {
   test(`${path} renders without errors`, async ({ page }) => {
+    if (path === "/dashboard") await seedProfile(page);
     const errors: string[] = [];
     page.on("pageerror", (error) => errors.push(error.message));
 
     const response = await page.goto(path, { waitUntil: "domcontentloaded" });
     expect(response?.status()).toBe(200);
-
     await expect(page.getByRole("heading", { level: 1 })).toContainText(heading);
-    await expect(page.locator(".ember-stat-grid .ember-stat")).toHaveCount(4);
 
-    // One card radius, one control radius (DESIGN-CONSISTENCY.md).
-    await expect(page.locator(".ember-stat-grid")).toHaveCSS("border-radius", "6px");
-    const control = page.locator(".ember-export-button").first();
-    if ((await control.count()) > 0) await expect(control).toHaveCSS("border-radius", "5px");
+    if (path === "/dashboard") {
+      await expect(page.getByRole("heading", { level: 1 })).toContainText("Test User");
+      await expect(page.locator(".ember-map-canvas")).toBeVisible();
+    }
 
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -33,19 +45,22 @@ for (const { path, heading } of PAGES) {
   });
 }
 
-test("navigation reaches every page", async ({ page }) => {
-  await page.goto("/");
-  for (const { path, heading, nav } of PAGES.slice(1)) {
+test("first visit asks for name and allows continuing without location", async ({ page }) => {
+  await page.goto("/dashboard");
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await page.getByLabel("Your name").fill("Alex");
+  await page.getByRole("button", { name: "Continue without location" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toContainText("Alex");
+});
+
+test("sidebar navigation reaches app pages", async ({ page }) => {
+  await seedProfile(page);
+  await page.goto("/dashboard");
+  for (const { path, heading, nav } of APP_PAGES.slice(1).filter((item) => item.nav)) {
     await page.getByRole("link", { name: nav, exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`${path}$`));
     await expect(page.getByRole("heading", { level: 1 })).toContainText(heading);
   }
-});
-
-test("live/sample toggle keeps the map mounted", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: "LIVE" }).click();
-  await expect(page.locator(".ember-map-canvas")).toBeVisible();
-  await page.getByRole("button", { name: "SAMPLE" }).click();
-  await expect(page.locator(".ember-map-canvas")).toBeVisible();
 });

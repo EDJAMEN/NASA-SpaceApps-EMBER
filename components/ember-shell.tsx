@@ -49,7 +49,7 @@ import { useTheme } from "@/hooks/use-theme";
 export type EmberNavKey = "overview" | "detections" | "alerts" | "calendar" | "ingestion";
 
 const NAV: Array<{ key: EmberNavKey; to: string; label: string; icon: typeof Flame }> = [
-  { key: "overview", to: "/", label: "Overview", icon: LayoutGrid },
+  { key: "overview", to: "/dashboard", label: "Overview", icon: LayoutGrid },
   { key: "detections", to: "/detections", label: "Detections", icon: Radio },
   { key: "alerts", to: "/alerts", label: "Alerts", icon: TriangleAlert },
   { key: "calendar", to: "/calendar", label: "Burn calendar", icon: CalendarDays },
@@ -194,13 +194,13 @@ export function EmberShell({
       <SidebarInset className={cover ? "overflow-x-clip bg-transparent" : undefined}>
         {cover ? (
           // One floating glass bar: navigation context on the left, map controls on the right.
-          <header className="pointer-events-none sticky top-0 z-30 px-2 pt-2 sm:px-3 sm:pt-3">
+          <header className="pointer-events-none sticky top-0 z-[60] px-2 pt-2 sm:px-3 sm:pt-3">
             <div className="pointer-events-auto flex h-12 items-center gap-1 rounded-xl border bg-card/85 px-1.5 shadow-lg backdrop-blur-md sm:gap-1.5 sm:px-2">
               <SidebarTrigger aria-label="Toggle sidebar ( [ )" className="shrink-0 rounded-lg border" />
               <Breadcrumb className="hidden shrink-0 md:block">
                 <BreadcrumbList>
                   <BreadcrumbItem>
-                    <BreadcrumbLink href="/">Workspace</BreadcrumbLink>
+                    <BreadcrumbLink href="/dashboard">Workspace</BreadcrumbLink>
                   </BreadcrumbItem>
                   <BreadcrumbSeparator />
                   <BreadcrumbItem>
@@ -242,7 +242,7 @@ export function EmberShell({
             <Breadcrumb>
               <BreadcrumbList>
                 <BreadcrumbItem>
-                  <BreadcrumbLink href="/">Workspace</BreadcrumbLink>
+                  <BreadcrumbLink href="/dashboard">Workspace</BreadcrumbLink>
                 </BreadcrumbItem>
                 <BreadcrumbSeparator />
                 <BreadcrumbItem>

@@ -138,7 +138,7 @@ export function DetectionsPage() {
         </div>
         <div className="ember-page-actions flex gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link href="/">
+            <Link href="/dashboard">
               <MapPin className="size-4" /> Live map
             </Link>
           </Button>
@@ -354,7 +354,7 @@ export function DetectionsPage() {
               </dl>
               <SheetFooter className="mt-8">
                 <Button asChild className="w-full">
-                  <Link href="/">
+                  <Link href="/dashboard">
                     <MapPin className="size-4" /> Open live map
                   </Link>
                 </Button>

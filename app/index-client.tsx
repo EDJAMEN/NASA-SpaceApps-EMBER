@@ -33,6 +33,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Input } from "@/components/ui/input";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -85,6 +94,11 @@ type MapView = "globe" | "mercator"; // 3D globe or flat map projection
 const VIEWS: OverviewView[] = ["fires", "temperature", "heatindex"];
 const MAP_SEARCH_ID = "ember-map-search-input";
 const OVERVIEW_STORAGE_KEY = "ember.overview.v1";
+const PROFILE_STORAGE_KEY = "ember.profile.v1";
+
+function greetingForHour(hour: number) {
+  return hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
+}
 
 function readSavedOverview(): { place?: GuidePlace; view?: OverviewView; mapView?: MapView; realistic?: boolean; windTexture?: boolean; adminLevel?: string } {
   try {
@@ -161,9 +175,87 @@ export function EmberDashboard() {
   // Third map style: the wind-speed colours as the map texture (earth.nullschool / Zoom Earth look).
   const [windTexture, setWindTexture] = useState(false);
   const [restored, setRestored] = useState(false);
+  const [userName, setUserName] = useState("team");
+  const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [welcomeName, setWelcomeName] = useState("");
+  const [welcomeError, setWelcomeError] = useState("");
+  const [locatingUser, setLocatingUser] = useState(false);
+  const [greeting, setGreeting] = useState("Good morning");
   const handleLocate = useCallback((place: GuidePlace) => {
     setPlace(place);
   }, []);
+
+  useEffect(() => {
+    setGreeting(greetingForHour(new Date().getHours()));
+    try {
+      const saved = JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) ?? "null") as { name?: unknown } | null;
+      if (typeof saved?.name === "string" && saved.name.trim()) {
+        setUserName(saved.name.trim().slice(0, 40));
+      } else {
+        setWelcomeOpen(true);
+      }
+    } catch {
+      setWelcomeOpen(true);
+    }
+  }, []);
+
+  const saveWelcome = useCallback(() => {
+    const name = welcomeName.trim();
+    if (!name) {
+      setWelcomeError("Enter your name to continue.");
+      return null;
+    }
+    setUserName(name);
+    setWelcomeError("");
+    return name;
+  }, [welcomeName]);
+
+  const persistWelcome = (name: string) => {
+    try {
+      localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify({ name }));
+    } catch {
+      // Storage blocked: keep profile for this session.
+    }
+  };
+
+  const continueWithoutLocation = () => {
+    const name = saveWelcome();
+    if (!name) return;
+    persistWelcome(name);
+    setWelcomeOpen(false);
+  };
+
+  const locateAndContinue = () => {
+    const name = saveWelcome();
+    if (!name) return;
+    if (!navigator.geolocation) {
+      setWelcomeError("Location is not available in this browser. Continue without it or try another browser.");
+      return;
+    }
+    setLocatingUser(true);
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        handleLocate({
+          name: "Your location",
+          region: "Current location",
+          lat: coords.latitude,
+          lng: coords.longitude,
+        });
+        persistWelcome(name);
+        setLocatingUser(false);
+        setWelcomeOpen(false);
+      },
+      (error) => {
+        setWelcomeError(
+          error.code === error.PERMISSION_DENIED
+            ? "Location permission was denied. You can continue without location."
+            : "Could not get your location. Check browser permission and try again.",
+        );
+        setLocatingUser(false);
+      },
+      { enableHighAccuracy: true, timeout: 12_000, maximumAge: 300_000 },
+    );
+  };
 
   // Survive a refresh: restore the last place + view, then keep them saved (per-browser convenience only).
   useEffect(() => {
@@ -904,7 +996,7 @@ export function EmberDashboard() {
                 <SlidersHorizontal size={14} />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" sideOffset={8} className="w-56">
+            <DropdownMenuContent align="end" sideOffset={8} className="z-[70] w-56">
               <DropdownMenuLabel>Map view</DropdownMenuLabel>
               <DropdownMenuRadioGroup
                 value={mapView}
@@ -959,6 +1051,50 @@ export function EmberDashboard() {
         </>
       }
     >
+      <Dialog
+        open={welcomeOpen}
+        onOpenChange={(open) => {
+          if (open) setWelcomeOpen(true);
+        }}
+      >
+        <DialogContent
+          className="max-w-md"
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle>Welcome to EMBER</DialogTitle>
+            <DialogDescription>
+              Set your dashboard name and choose whether to center the map on your current location.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2">
+            <label htmlFor="ember-user-name" className="text-sm font-medium">Your name</label>
+            <Input
+              id="ember-user-name"
+              autoFocus
+              autoComplete="given-name"
+              maxLength={40}
+              value={welcomeName}
+              onChange={(event) => setWelcomeName(event.target.value)}
+              onKeyDown={(event) => event.key === "Enter" && continueWithoutLocation()}
+              placeholder="e.g. Alex"
+            />
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Location access is optional. If allowed, it centers the map and loads detections for your area.
+          </p>
+          {welcomeError && <p role="alert" className="text-sm text-destructive">{welcomeError}</p>}
+          <DialogFooter className="gap-2 sm:flex-row sm:justify-end sm:space-x-0">
+            <Button type="button" variant="outline" disabled={locatingUser} onClick={continueWithoutLocation}>
+              Continue without location
+            </Button>
+            <Button type="button" disabled={locatingUser || !welcomeName.trim()} onClick={locateAndContinue}>
+              <MapPin size={15} /> {locatingUser ? "Finding you…" : "Use my location"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className="ember-cover">
         {/* Full-screen map, pinned behind everything; panels float over it and never resize it. */}
         <section className="ember-map-section fixed inset-0 z-0" id="map">
@@ -1415,7 +1551,7 @@ export function EmberDashboard() {
                   <span className="size-1.5 rounded-full bg-emerald-500" /> Field operations <span className="opacity-70">/ Nov 13, 2026</span>
                 </p>
                 <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-                  Good morning, team.
+                  {greeting}, {userName}.
                 </h1>
                 <p className="text-sm text-muted-foreground">Here’s the latest across your monitored region.</p>
               </div>

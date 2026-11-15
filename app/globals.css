@@ -180,6 +180,11 @@
 [data-sidebar="menu-button"][data-active="true"] { position: relative; font-weight: 650; }
 [data-sidebar="menu-button"][data-active="true"]::before { content: ""; position: absolute; left: -8px; top: 6px; bottom: 6px; width: 3px; border-radius: 999px; background: var(--primary); }
 [data-sidebar="group-label"] { font-family: var(--font-mono); font-size: 9px; letter-spacing: 0.08em; }
+[data-sidebar="content"] { scrollbar-width: thin; scrollbar-color: color-mix(in oklab, var(--foreground) 22%, transparent) transparent; }
+[data-sidebar="content"]::-webkit-scrollbar { width: 6px; }
+[data-sidebar="content"]::-webkit-scrollbar-track { background: transparent; }
+[data-sidebar="content"]::-webkit-scrollbar-thumb { border-radius: var(--radius-pill); background: color-mix(in oklab, var(--foreground) 22%, transparent); }
+[data-sidebar="content"]::-webkit-scrollbar-thumb:hover { background: color-mix(in oklab, var(--foreground) 38%, transparent); }
 .ember-page-heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 23px; }
 .ember-eyebrow { display: flex; align-items: center; gap: 8px; color: var(--primary); font-family: var(--font-mono); font-size: 9px; font-weight: 600; }
 .ember-eyebrow > span:first-child { width: 6px; height: 6px; border-radius: var(--radius-pill); background: var(--ember-coral); }
@@ -1014,7 +1019,7 @@
 @media (min-width: 768px) {
   .peer[data-state="expanded"] ~ main .ember-cover { --cover-left: calc(var(--sidebar-width) + 1.5rem); }
 }
-html:has(.ember-cover) { overflow-x: hidden; }
+html:has(.ember-cover) { overflow-x: hidden; scrollbar-gutter: stable; }
 .ember-cover .ember-map-section { margin: 0; }
 .ember-cover .ember-map-section .ember-map-layout { position: absolute; inset: 0; height: 100%; min-height: 0; margin: 0; border: 0; border-radius: 0; display: block; }
 .ember-cover .ember-map-section .ember-map-canvas { position: absolute; inset: 0; height: 100%; min-height: 0; }
@@ -1027,3 +1032,69 @@ html:has(.ember-cover) { overflow-x: hidden; }
 .ember-cover .ember-panel-toggle { transition: right .3s ease-out; }
 .ember-topbar-scroll { scrollbar-width: none; }
 .ember-topbar-scroll::-webkit-scrollbar { display: none; }
+
+/* Landing page: restrained entrance motion and scroll-linked map parallax. */
+html:has(.ember-landing-page) { scroll-behavior: smooth; }
+.ember-landing-page { isolation: isolate; overflow-x: clip; }
+.ember-landing-ambient {
+  position: absolute;
+  z-index: 0;
+  top: -15rem;
+  right: -12rem;
+  width: min(78vw, 950px);
+  height: 760px;
+  pointer-events: none;
+  background: radial-gradient(ellipse, color-mix(in oklab, var(--primary) 13%, transparent), transparent 68%);
+}
+.ember-landing-page-grid {
+  position: absolute;
+  z-index: 0;
+  inset: 0 0 auto;
+  height: 120vh;
+  opacity: .32;
+  pointer-events: none;
+  background-image: linear-gradient(to right, var(--border) 1px, transparent 1px), linear-gradient(to bottom, var(--border) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: linear-gradient(to bottom, black, transparent 90%);
+}
+#capabilities,
+#how-it-works,
+.ember-landing-page footer { position: relative; z-index: 1; }
+.ember-landing-header { position: sticky; top: 0; z-index: 100; border-bottom: 1px solid color-mix(in oklab, var(--border) 60%, transparent); background: color-mix(in oklab, var(--background) 68%, transparent); box-shadow: 0 8px 24px color-mix(in oklab, var(--foreground) 4%, transparent); backdrop-filter: blur(20px) saturate(1.2); -webkit-backdrop-filter: blur(20px) saturate(1.2); }
+.ember-landing-hero { position: relative; z-index: 1; }
+.ember-landing-copy { animation: ember-landing-enter .7s cubic-bezier(.2,.8,.2,1) both; }
+.ember-landing-preview { animation: ember-landing-enter .8s .12s cubic-bezier(.2,.8,.2,1) both; }
+.ember-landing-map-parallax { transform-origin: center; }
+.ember-landing-hotspot { animation: ember-landing-pulse 3s ease-in-out infinite; }
+.ember-landing-hotspot-delay { animation-delay: .8s; }
+.ember-landing-hotspot-delay-2 { animation-delay: 1.5s; }
+.ember-landing-feature { transition: transform .24s ease, border-color .24s ease, box-shadow .24s ease; animation: ember-landing-fade .55s .12s ease both; }
+.ember-landing-feature-2 { animation-delay: .2s; }
+.ember-landing-feature-3 { animation-delay: .28s; }
+.ember-landing-feature:hover { transform: translateY(-4px); border-color: color-mix(in oklab, var(--primary) 34%, var(--border)); box-shadow: 0 12px 30px color-mix(in oklab, var(--foreground) 8%, transparent); }
+@keyframes ember-landing-enter { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes ember-landing-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes ember-landing-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.09); } }
+@keyframes ember-landing-parallax { to { transform: translate3d(0, -64px, 0) scale(1.05); } }
+@keyframes ember-landing-grid-drift { to { transform: translate3d(0, -96px, 0); } }
+@supports (animation-timeline: scroll()) {
+  .ember-landing-page-grid {
+    animation: ember-landing-grid-drift 1s linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 90vh;
+  }
+  .ember-landing-map-parallax {
+    animation: ember-landing-parallax 1s linear both;
+    animation-timeline: scroll(root block);
+    animation-range: 0 85vh;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:has(.ember-landing-page) { scroll-behavior: auto; }
+  .ember-landing-copy,
+  .ember-landing-preview,
+  .ember-landing-feature,
+  .ember-landing-hotspot,
+  .ember-landing-map-parallax,
+  .ember-landing-page-grid { animation: none !important; transition: none !important; }
+}
