@@ -208,13 +208,6 @@ export function EmberShell({
                   </BreadcrumbItem>
                 </BreadcrumbList>
               </Breadcrumb>
-              <span
-                className={`hidden shrink-0 items-center gap-1.5 text-sm font-medium tracking-wide sm:inline-flex ${liveStatus?.state === "error" ? "text-destructive" : ""}`}
-                title={updatedLabel || undefined}
-              >
-                {isLive && liveStatus?.state !== "error" && <span className="ember-live-dot" aria-hidden />}
-                {pillLabel}
-              </span>
               {headerLeft}
               <div className="ml-auto shrink-0">{headerSearch}</div>
               <div className="ember-topbar-scroll flex min-w-0 items-center gap-1 overflow-x-auto">{headerRight}</div>

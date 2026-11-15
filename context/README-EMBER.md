@@ -29,7 +29,7 @@ EMBER builds on NASA FIRMS satellite thermal data and addresses what the standar
 
 | Feature / Capability | Standard NASA FIRMS | EMBER (Enhanced Platform) |
 |---|---|---|
-| **Sensor Integration and Resolution** | Displays MODIS (1 km) and VIIRS (375 m) as separate, overlapping layers, often resulting in messy duplicate dots. | **True Data Harmonization:** fuses, deduplicates, and cross-calibrates MODIS and VIIRS into a unified thermal cluster layer with confidence scores. |
+| **Sensor Integration and Resolution** | Displays MODIS (1 km) and VIIRS (375 m) as separate, overlapping layers, often resulting in messy duplicate dots. | **True Data Harmonization:** fuses, groups nearby detections, and cross-calibrates MODIS and VIIRS into a unified thermal cluster layer with confidence scores. |
 | **Temporal Tracking and Burning Calendar** | Limited to basic date-range map filtering and raw CSV downloads; lacks built-in visual seasonality tools. | **Interactive Burning Calendar:** visualizes daily/monthly fire frequency heatmaps, peak burn seasons, and historical anomaly comparisons at a glance. |
 | **Data Actionability** | Provides raw geospatial data ("red dots"). Users must independently figure out what the fire threat means for them. | **Smart Action Guide:** translates raw data into practical, location-aware guidance (what to do, what to bring, what to prepare). |
 | **Health and Environmental Context** | Focuses strictly on surface thermal anomalies; ignores human physiological risk (ambient temperature, smoke). | **Heat Index and Health Alerts:** integrates real-time heat index and air quality metrics, pushing proactive alerts when health risks peak. |
@@ -47,7 +47,7 @@ MODIS (about 1 km resolution) and VIIRS (about 375 m resolution) observe the sam
 EMBER treats the two products as one source of evidence:
 
 - **Fuse** MODIS and VIIRS detections into a single thermal cluster layer.
-- **Deduplicate** overlapping detections of the same thermal event.
+- **Group** nearby detections of the same thermal event into one cluster.
 - **Cross-calibrate** product-specific values so they can be compared.
 - **Score confidence** for each cluster, while retaining the original product values for traceability.
 

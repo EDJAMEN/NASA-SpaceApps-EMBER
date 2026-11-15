@@ -1453,9 +1453,14 @@ export function EmberDashboard() {
                       <Badge variant="secondary" className="font-mono text-[10px]">{visibleHotspots.length.toString().padStart(2, "0")}</Badge>
                     </CardTitle>
                     <CardDescription className="mt-0.5 text-[11px]">
-                      {harmonized
-                        ? "MODIS + VIIRS fused · nearest first"
-                        : "Satellite pixels · nearest first"}
+                      {harmonized ? "MODIS + VIIRS fused · nearest first" : "Satellite pixels · nearest first"}
+                      {/* Same wording as the heatspot callout on the map, shown while Heatspots is on. */}
+                      {heatOn && !climate && (
+                        <>
+                          {" · "}
+                          <b className="font-bold text-[#ff7b6e]">Heat (not live)</b>
+                        </>
+                      )}
                     </CardDescription>
                   </div>
                   <Button variant="ghost" size="icon" className="size-7" aria-label="Incident options">
@@ -1465,6 +1470,8 @@ export function EmberDashboard() {
                 <CardContent className="space-y-1 p-3 pt-0">
                     {visibleHotspots.slice(0, 3).map((hotspot) => {
                       const active = selectedHotspot?.id === hotspot.id;
+                      // Same rule as the map callout: a heatspot glow (detection) sits on this cluster.
+                      const onHeat = heatOn && heatPoints.some((h) => haversineKm(h.lat, h.lng, hotspot.lat, hotspot.lng) <= 3);
                       return (
                         <button
                           type="button"
@@ -1486,6 +1493,7 @@ export function EmberDashboard() {
                             <span className="truncate text-[10px] text-muted-foreground">
                               {!hotspot.name.startsWith("Sector") ? `${hotspot.settlement} · ` : ""}{hotspot.count} {harmonized ? "detections" : "px"} · {hotspot.acqTime}
                             </span>
+                            {onHeat && <b className="text-[10px] font-bold text-[#ff7b6e]">Heat (not live)</b>}
                           </span>
                         </button>
                       );
@@ -1575,11 +1583,23 @@ export function EmberDashboard() {
                       <Layers size={12} />
                     </span>
                     MODIS + VIIRS HARMONIZATION
-                    <Badge className="font-mono text-[10px]">
-                      {harmonizationStats.mergedDuplicateCount > 0
-                        ? `-${harmonizationStats.reductionPercent}% duplicates merged`
+                    <Badge
+                      className="font-mono text-[10px]"
+                      title={
+                        harmonizationStats.groupedDetectionCount > 0
+                          ? `-${harmonizationStats.reductionPercent}% after grouping nearby detections`
+                          : undefined
+                      }
+                    >
+                      {harmonizationStats.groupedDetectionCount > 0
+                        ? `${harmonizationStats.rawDetectionCount} detections → ${harmonizationStats.harmonizedClusterCount} clusters`
                         : "Sensor-fused"}
                     </Badge>
+                    {harmonizationStats.groupedDetectionCount > 0 && (
+                      <span className="text-[10px] font-normal text-muted-foreground">
+                        -{harmonizationStats.reductionPercent}% after grouping nearby detections
+                      </span>
+                    )}
                   </CardTitle>
                   <CardDescription className="text-[11px]">
                     Compare cross-sensor fused fire events against raw unmerged MODIS (1 km) &amp; VIIRS (375 m) detections.
